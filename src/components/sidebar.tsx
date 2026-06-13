@@ -15,10 +15,15 @@ export function Sidebar() {
   const {
     filters,
     toggleCategory,
+    setSelectedCategories,
     toggleSplit,
+    setSelectedSplits,
     images,
     toggleSemanticFilter,
+    setSemanticFilter,
   } = useGalleryStore();
+
+  const allSplits = ['train', 'validation', 'test'] as const;
 
   // Count annotations per category
   const categoryCounts: Record<string, number> = {};
@@ -53,11 +58,15 @@ export function Sidebar() {
     <aside className="w-[260px] border-r border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
       {/* Dataset Splits */}
       <div className="p-4 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          数据划分
-        </h3>
+        <FilterHeader
+          title="数据划分"
+          selected={filters.selectedSplits.length}
+          total={allSplits.length}
+          onSelectAll={() => setSelectedSplits([...allSplits])}
+          onClear={() => setSelectedSplits([])}
+        />
         <div className="space-y-1">
-          {(['train', 'validation', 'test'] as const).map((split) => {
+          {allSplits.map((split) => {
             const checked = filters.selectedSplits.includes(split);
             return (
               <label
@@ -97,9 +106,13 @@ export function Sidebar() {
 
       {/* Categories */}
       <div className="p-4 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          目标类别
-        </h3>
+        <FilterHeader
+          title="目标类别"
+          selected={filters.selectedCategories.length}
+          total={CATEGORIES.length}
+          onSelectAll={() => setSelectedCategories([...CATEGORIES])}
+          onClear={() => setSelectedCategories([])}
+        />
         <div className="space-y-1">
           {CATEGORIES.map((cat) => {
             const checked = filters.selectedCategories.includes(cat);
@@ -151,9 +164,14 @@ export function Sidebar() {
         <div className="space-y-4">
           {(Object.keys(SEMANTIC_OPTIONS) as (keyof SemanticAttributes)[]).map((key) => (
             <div key={key}>
-              <div className="text-[10px] text-[#555872] uppercase tracking-wider mb-1.5">
-                {SEMANTIC_LABELS[key]}
-              </div>
+              <FilterHeader
+                title={SEMANTIC_LABELS[key]}
+                selected={filters.selectedSemantics[key]?.length || 0}
+                total={SEMANTIC_OPTIONS[key].length}
+                compact
+                onSelectAll={() => setSemanticFilter(key, [...SEMANTIC_OPTIONS[key]])}
+                onClear={() => setSemanticFilter(key, [])}
+              />
               <div className="flex flex-wrap gap-1">
                 {SEMANTIC_OPTIONS[key].map((value) => {
                   const active = filters.selectedSemantics[key]?.includes(value) || false;
@@ -193,5 +211,66 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+function FilterHeader({
+  title,
+  selected,
+  total,
+  compact = false,
+  onSelectAll,
+  onClear,
+}: {
+  title: string;
+  selected: number;
+  total: number;
+  compact?: boolean;
+  onSelectAll: () => void;
+  onClear: () => void;
+}) {
+  const allSelected = selected === total;
+  const noneSelected = selected === 0;
+
+  return (
+    <div className={cn('flex items-center justify-between', compact ? 'mb-1.5' : 'mb-3')}>
+      <div className="flex items-center gap-1.5">
+        <h3
+          className={cn(
+            'font-semibold text-[#8b8ea8] uppercase tracking-wider',
+            compact ? 'text-[10px]' : 'text-xs'
+          )}
+        >
+          {title}
+        </h3>
+        <span
+          className={cn(
+            'rounded px-1 py-0.5 font-mono text-[9px]',
+            allSelected ? 'text-[#555872]' : 'bg-[#1e2030] text-[#e2e4f0]'
+          )}
+        >
+          {selected}/{total}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onSelectAll}
+          disabled={allSelected}
+          className="text-[9px] text-[#555872] transition-colors hover:text-[#e2e4f0] disabled:cursor-default disabled:opacity-35"
+        >
+          全选
+        </button>
+        <span className="text-[9px] text-[#2a2d42]">/</span>
+        <button
+          type="button"
+          onClick={onClear}
+          disabled={noneSelected}
+          className="text-[9px] text-[#555872] transition-colors hover:text-[#e2e4f0] disabled:cursor-default disabled:opacity-35"
+        >
+          清空
+        </button>
+      </div>
+    </div>
   );
 }

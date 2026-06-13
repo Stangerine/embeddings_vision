@@ -36,8 +36,11 @@ interface GalleryState {
   setActiveDataset: (id: string) => void;
   setFilters: (filters: Partial<FilterState>) => void;
   toggleCategory: (category: string) => void;
+  setSelectedCategories: (categories: string[]) => void;
   toggleSplit: (split: 'train' | 'validation' | 'test') => void;
+  setSelectedSplits: (splits: ('train' | 'validation' | 'test')[]) => void;
   toggleSemanticFilter: (key: keyof SemanticAttributes, value: string) => void;
+  setSemanticFilter: (key: keyof SemanticAttributes, values: string[]) => void;
   setScatterSelection: (ids: string[]) => void;
   setGridColumns: (cols: number) => void;
   
@@ -86,6 +89,11 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         : [...current, category];
       return { filters: { ...state.filters, selectedCategories: next } };
     }),
+
+  setSelectedCategories: (categories) =>
+    set((state) => ({
+      filters: { ...state.filters, selectedCategories: categories },
+    })),
   
   toggleSplit: (split) =>
     set((state) => {
@@ -95,6 +103,11 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         : [...current, split];
       return { filters: { ...state.filters, selectedSplits: next } };
     }),
+
+  setSelectedSplits: (splits) =>
+    set((state) => ({
+      filters: { ...state.filters, selectedSplits: splits },
+    })),
 
   toggleSemanticFilter: (key, value) =>
     set((state) => {
@@ -112,6 +125,17 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         },
       };
     }),
+
+  setSemanticFilter: (key, values) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        selectedSemantics: {
+          ...state.filters.selectedSemantics,
+          [key]: values,
+        },
+      },
+    })),
   
   setScatterSelection: (ids) => set({ scatterSelection: ids }),
   setGridColumns: (cols) => set({ gridColumns: cols }),

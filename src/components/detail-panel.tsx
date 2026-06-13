@@ -11,7 +11,7 @@ import {
   SPLIT_COLORS,
   SPLIT_LABELS,
 } from '@/lib/mock-data';
-import type { SemanticAttributes } from '@/lib/types';
+import type { ColorByMode, SemanticAttributes } from '@/lib/types';
 
 export function DetailPanel() {
   const { selectedImageId, images, selectImage, getFilteredImages, colorByMode } = useGalleryStore();
@@ -46,8 +46,14 @@ export function DetailPanel() {
     counts[value] = (counts[value] || 0) + 1;
     return counts;
   }, {});
+  const semanticDistribution = (key: keyof SemanticAttributes) =>
+    filteredImages.reduce<Record<string, number>>((counts, img) => {
+      const value = img.metadata.semantics[key];
+      counts[value] = (counts[value] || 0) + 1;
+      return counts;
+    }, {});
 
-  const colorModeLabel: Record<string, string> = {
+  const colorModeLabel: Record<ColorByMode, string> = {
     category: '类别',
     split: '划分',
     confidence: '置信度',
@@ -59,6 +65,16 @@ export function DetailPanel() {
     environment: SEMANTIC_LABELS.environment,
     cluster: '聚类',
   };
+  const overviewSections = buildOverviewSections({
+    colorByMode,
+    topCategories,
+    filteredAnnotationCount,
+    splitCounts,
+    timeCounts,
+    environmentCounts,
+    semanticDistribution,
+    filteredImageCount: filteredImages.length,
+  });
 
   if (!selectedImage) {
     return (
@@ -91,52 +107,13 @@ export function DetailPanel() {
           </div>
         </div>
 
-        <OverviewSection title="类别 Top 分布">
-          {topCategories.map(([label, count]) => {
-            const pct = filteredAnnotationCount > 0 ? (count / filteredAnnotationCount) * 100 : 0;
-            return (
-              <OverviewBar key={label} label={label} count={count} pct={pct} />
-            );
-          })}
-        </OverviewSection>
-
-        <OverviewSection title="数据集划分">
-          {(['train', 'validation', 'test'] as const).map((split) => {
-            const count = splitCounts[split] || 0;
-            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
-            return (
-              <OverviewBar key={split} label={SPLIT_LABELS[split]} count={count} pct={pct} />
-            );
-          })}
-        </OverviewSection>
-
-        <OverviewSection title="时段分布">
-          {Object.entries(timeCounts).map(([value, count]) => {
-            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
-            return (
-              <OverviewBar
-                key={value}
-                label={SEMANTIC_VALUE_LABELS.timeOfDay[value]}
-                count={count}
-                pct={pct}
-              />
-            );
-          })}
-        </OverviewSection>
-
-        <OverviewSection title="环境分布">
-          {Object.entries(environmentCounts).map(([value, count]) => {
-            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
-            return (
-              <OverviewBar
-                key={value}
-                label={SEMANTIC_VALUE_LABELS.environment[value]}
-                count={count}
-                pct={pct}
-              />
-            );
-          })}
-        </OverviewSection>
+        {overviewSections.map((section) => (
+          <OverviewSection key={section.title} title={section.title} active={section.active}>
+            {section.rows.map((row) => (
+              <OverviewBar key={row.label} label={row.label} count={row.count} pct={row.pct} />
+            ))}
+          </OverviewSection>
+        ))}
       </aside>
     );
   }
@@ -416,19 +393,130 @@ export function DetailPanel() {
 
 function OverviewSection({
   title,
+  active = false,
   children,
 }: {
   title: string;
+  active?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="px-4 py-3 border-b border-[#1e2030]">
-      <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
-        {title}
-      </h4>
+      <div className="mb-2 flex items-center gap-2">
+        <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
+          {title}
+        </h4>
+        {active && (
+          <span className="rounded bg-[#6366f1]/15 px-1.5 py-0.5 text-[9px] text-[#a5b4fc]">
+            当前着色
+          </span>
+        )}
+      </div>
       <div className="space-y-2">{children}</div>
     </div>
   );
+}
+
+interface OverviewRow {
+  label: string;
+  count: number;
+  pct: number;
+}
+
+interface OverviewSectionData {
+  title: string;
+  active: boolean;
+  rows: OverviewRow[];
+}
+
+function buildOverviewSections({
+  colorByMode,
+  topCategories,
+  filteredAnnotationCount,
+  splitCounts,
+  timeCounts,
+  environmentCounts,
+  semanticDistribution,
+  filteredImageCount,
+}: {
+  colorByMode: ColorByMode;
+  topCategories: [string, number][];
+  filteredAnnotationCount: number;
+  splitCounts: Record<string, number>;
+  timeCounts: Record<string, number>;
+  environmentCounts: Record<string, number>;
+  semanticDistribution: (key: keyof SemanticAttributes) => Record<string, number>;
+  filteredImageCount: number;
+}): OverviewSectionData[] {
+  const categorySection: OverviewSectionData = {
+    title: '类别 Top 分布',
+    active: colorByMode === 'category' || colorByMode === 'cluster',
+    rows: topCategories.map(([label, count]) => ({
+      label,
+      count,
+      pct: filteredAnnotationCount > 0 ? (count / filteredAnnotationCount) * 100 : 0,
+    })),
+  };
+
+  const splitSection: OverviewSectionData = {
+    title: '数据划分',
+    active: colorByMode === 'split',
+    rows: (['train', 'validation', 'test'] as const).map((split) => {
+      const count = splitCounts[split] || 0;
+      return {
+        label: SPLIT_LABELS[split],
+        count,
+        pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
+      };
+    }),
+  };
+
+  const timeSection: OverviewSectionData = {
+    title: '时段分布',
+    active: colorByMode === 'timeOfDay',
+    rows: Object.entries(timeCounts).map(([value, count]) => ({
+      label: SEMANTIC_VALUE_LABELS.timeOfDay[value],
+      count,
+      pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
+    })),
+  };
+
+  const environmentSection: OverviewSectionData = {
+    title: '环境分布',
+    active: colorByMode === 'environment',
+    rows: Object.entries(environmentCounts).map(([value, count]) => ({
+      label: SEMANTIC_VALUE_LABELS.environment[value],
+      count,
+      pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
+    })),
+  };
+
+  const semanticKeyByMode: Partial<Record<ColorByMode, keyof SemanticAttributes>> = {
+    lighting: 'lighting',
+    viewpoint: 'viewpoint',
+    blur: 'blur',
+    weather: 'weather',
+  };
+
+  const activeSemanticKey = semanticKeyByMode[colorByMode];
+  const activeSemanticSection: OverviewSectionData | null = activeSemanticKey
+    ? {
+        title: `${SEMANTIC_LABELS[activeSemanticKey]}分布`,
+        active: true,
+        rows: Object.entries(semanticDistribution(activeSemanticKey)).map(([value, count]) => ({
+          label: SEMANTIC_VALUE_LABELS[activeSemanticKey][value],
+          count,
+          pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
+        })),
+      }
+    : null;
+
+  const baseSections = [categorySection, splitSection, timeSection, environmentSection];
+  if (!activeSemanticSection) {
+    return [...baseSections].sort((a, b) => Number(b.active) - Number(a.active));
+  }
+
+  return [activeSemanticSection, ...baseSections];
 }
 
 function OverviewBar({

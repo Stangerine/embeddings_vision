@@ -138,6 +138,29 @@ function ImageCard({ image }: { image: DatasetImage }) {
             {image.detections.length} 个标注
           </span>
         </div>
+
+        {/* Category chips on focus */}
+        <div
+          className={cn(
+            'absolute inset-x-1.5 bottom-6 flex flex-wrap gap-1 transition-opacity duration-150',
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          )}
+        >
+          {image.detections.slice(0, 3).map((det) => (
+            <span
+              key={det.id}
+              className="rounded bg-black/65 px-1 py-0 text-[9px] backdrop-blur-sm"
+              style={{ color: CATEGORY_COLORS[det.label] }}
+            >
+              {det.label}
+            </span>
+          ))}
+          {image.detections.length > 3 && (
+            <span className="rounded bg-black/65 px-1 py-0 text-[9px] text-[#8b8ea8] backdrop-blur-sm">
+              +{image.detections.length - 3}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Card footer */}
@@ -145,23 +168,6 @@ function ImageCard({ image }: { image: DatasetImage }) {
         <p className="text-[10px] text-[#8b8ea8] truncate font-mono">
           {image.filename}
         </p>
-        <div className="flex items-center gap-1 mt-0.5">
-          {image.detections.slice(0, 3).map((det) => (
-            <span
-              key={det.id}
-              className="text-[9px] px-1 py-0 rounded"
-              style={{
-                backgroundColor: `${CATEGORY_COLORS[det.label]}20`,
-                color: CATEGORY_COLORS[det.label],
-              }}
-            >
-              {det.label}
-            </span>
-          ))}
-          {image.detections.length > 3 && (
-            <span className="text-[9px] text-[#555872]">+{image.detections.length - 3}</span>
-          )}
-        </div>
       </div>
     </div>
   );
