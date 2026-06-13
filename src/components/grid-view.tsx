@@ -70,14 +70,6 @@ function ImageCard({ image }: { image: DatasetImage }) {
   const isSelected = selectedImageId === image.id;
   const imgRef = useRef<HTMLDivElement>(null);
 
-  // Filter detections by confidence range
-  const filters = useGalleryStore((s) => s.filters);
-  const visibleDetections = image.detections.filter(
-    (det) =>
-      det.confidence >= filters.confidenceRange[0] &&
-      det.confidence <= filters.confidenceRange[1]
-  );
-
   const handleClick = useCallback(() => {
     selectImage(isSelected ? null : image.id);
   }, [isSelected, image.id, selectImage]);
@@ -119,7 +111,7 @@ function ImageCard({ image }: { image: DatasetImage }) {
 
         {/* BBox overlay */}
         <BBoxOverlay
-          detections={visibleDetections}
+          detections={image.detections}
           width={image.width}
           height={image.height}
         />

@@ -75,7 +75,6 @@ export type ColorByMode =
 
 export interface FilterState {
   selectedCategories: string[];
-  confidenceRange: [number, number];
   selectedSplits: ('train' | 'validation' | 'test')[];
   selectedTags: string[];
   selectedSemantics: Partial<Record<keyof SemanticAttributes, string[]>>;

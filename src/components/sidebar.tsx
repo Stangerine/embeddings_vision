@@ -18,10 +18,23 @@ export function Sidebar() {
   const {
     filters,
     toggleCategory,
-    setConfidenceRange,
     images,
     toggleSemanticFilter,
+    getFilteredImages,
   } = useGalleryStore();
+
+  const filteredImages = getFilteredImages();
+  const filteredAnnotationCount = filteredImages.reduce(
+    (sum, img) => sum + img.detections.length,
+    0
+  );
+  const filteredCategoryCount = new Set(
+    filteredImages.flatMap((img) => img.detections.map((det) => det.label))
+  ).size;
+  const selectedSemanticFilterCount = Object.values(filters.selectedSemantics).reduce(
+    (sum, values) => sum + values.length,
+    0
+  );
 
   // Count annotations per category
   const categoryCounts: Record<string, number> = {};
@@ -49,6 +62,40 @@ export function Sidebar() {
 
   return (
     <aside className="w-[260px] border-r border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
+      {/* Dataset Overview */}
+      <div className="p-4 border-b border-[#1e2030]">
+        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
+          数据概览
+        </h3>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded bg-[#161822]/60 px-2 py-2">
+            <span className="block text-[9px] text-[#555872]">当前图片</span>
+            <span className="text-sm font-semibold text-[#e2e4f0]">
+              {filteredImages.length}
+            </span>
+            <span className="ml-1 text-[10px] text-[#555872]">/ {images.length}</span>
+          </div>
+          <div className="rounded bg-[#161822]/60 px-2 py-2">
+            <span className="block text-[9px] text-[#555872]">当前标注</span>
+            <span className="text-sm font-semibold text-[#e2e4f0]">
+              {filteredAnnotationCount}
+            </span>
+          </div>
+          <div className="rounded bg-[#161822]/60 px-2 py-2">
+            <span className="block text-[9px] text-[#555872]">覆盖类别</span>
+            <span className="text-sm font-semibold text-[#e2e4f0]">
+              {filteredCategoryCount}
+            </span>
+          </div>
+          <div className="rounded bg-[#161822]/60 px-2 py-2">
+            <span className="block text-[9px] text-[#555872]">语义筛选</span>
+            <span className="text-sm font-semibold text-[#e2e4f0]">
+              {selectedSemanticFilterCount}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Categories */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
@@ -95,45 +142,6 @@ export function Sidebar() {
               </label>
             );
           })}
-        </div>
-      </div>
-
-      {/* Confidence Range */}
-      <div className="p-4 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          置信度范围
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#555872] font-mono w-8 text-right">
-            {filters.confidenceRange[0].toFixed(2)}
-          </span>
-          <div className="flex-1 flex gap-1">
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={filters.confidenceRange[0]}
-              onChange={(e) =>
-                setConfidenceRange([parseFloat(e.target.value), filters.confidenceRange[1]])
-              }
-              className="flex-1 accent-[#6366f1] h-1"
-            />
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={filters.confidenceRange[1]}
-              onChange={(e) =>
-                setConfidenceRange([filters.confidenceRange[0], parseFloat(e.target.value)])
-              }
-              className="flex-1 accent-[#6366f1] h-1"
-            />
-          </div>
-          <span className="text-[10px] text-[#555872] font-mono w-8">
-            {filters.confidenceRange[1].toFixed(2)}
-          </span>
         </div>
       </div>
 

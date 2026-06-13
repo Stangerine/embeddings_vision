@@ -30,7 +30,6 @@ interface GalleryState {
   setActiveDataset: (id: string) => void;
   setFilters: (filters: Partial<FilterState>) => void;
   toggleCategory: (category: string) => void;
-  setConfidenceRange: (range: [number, number]) => void;
   toggleSplit: (split: 'train' | 'validation' | 'test') => void;
   toggleSemanticFilter: (key: keyof SemanticAttributes, value: string) => void;
   setScatterSelection: (ids: string[]) => void;
@@ -48,7 +47,6 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
   activeDataset: 'ds-001',
   filters: {
     selectedCategories: [...CATEGORIES],
-    confidenceRange: [0, 1],
     selectedSplits: ['train', 'validation', 'test'],
     selectedTags: [],
     selectedSemantics: {},
@@ -75,11 +73,6 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         : [...current, category];
       return { filters: { ...state.filters, selectedCategories: next } };
     }),
-  
-  setConfidenceRange: (range) =>
-    set((state) => ({
-      filters: { ...state.filters, confidenceRange: range },
-    })),
   
   toggleSplit: (split) =>
     set((state) => {
@@ -121,14 +114,6 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         filters.selectedCategories.includes(det.label)
       );
       if (!hasSelectedCategory) return false;
-      
-      // Confidence filter - at least one detection in range
-      const hasConfidenceInRange = img.detections.some(
-        (det) =>
-          det.confidence >= filters.confidenceRange[0] &&
-          det.confidence <= filters.confidenceRange[1]
-      );
-      if (!hasConfidenceInRange) return false;
       
       // Scatter selection filter
       if (scatterSelection.length > 0 && !scatterSelection.includes(img.id)) return false;

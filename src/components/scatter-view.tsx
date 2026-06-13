@@ -32,6 +32,12 @@ interface DataPoint {
   screenY: number;
 }
 
+interface LegendItem {
+  label: string;
+  color: string;
+  count: number | null;
+}
+
 // Point-in-polygon test (ray casting)
 function pointInPolygon(px: number, py: number, polygon: ScreenPoint[]): boolean {
   let inside = false;
@@ -519,6 +525,56 @@ export function ScatterView() {
     return 'cursor-crosshair';
   };
 
+  const legendItems: LegendItem[] = (() => {
+    if (colorByMode === 'confidence') {
+      return [
+        { label: '高置信度', color: getConfidenceColorScale(0.9), count: images.filter((img) => (img.detections[0]?.confidence || 0) >= 0.8).length },
+        { label: '中置信度', color: getConfidenceColorScale(0.65), count: images.filter((img) => {
+          const confidence = img.detections[0]?.confidence || 0;
+          return confidence >= 0.5 && confidence < 0.8;
+        }).length },
+        { label: '低置信度', color: getConfidenceColorScale(0.35), count: images.filter((img) => (img.detections[0]?.confidence || 0) < 0.5).length },
+      ];
+    }
+
+    if (colorByMode === 'split') {
+      return Object.entries(SPLIT_COLORS).map(([split, color]) => ({
+        label: SPLIT_LABELS[split],
+        color,
+        count: images.filter((img) => img.split === split).length,
+      }));
+    }
+
+    if (
+      colorByMode === 'lighting' ||
+      colorByMode === 'viewpoint' ||
+      colorByMode === 'blur' ||
+      colorByMode === 'weather' ||
+      colorByMode === 'timeOfDay' ||
+      colorByMode === 'environment'
+    ) {
+      return Object.entries(SEMANTIC_COLORS[colorByMode]).map(([value, color]) => ({
+        label: SEMANTIC_VALUE_LABELS[colorByMode][value],
+        color,
+        count: images.filter((img) => img.metadata.semantics[colorByMode] === value).length,
+      }));
+    }
+
+    const categoryCounts = images.reduce<Record<string, number>>((counts, img) => {
+      const label = img.detections[0]?.label || 'unknown';
+      counts[label] = (counts[label] || 0) + 1;
+      return counts;
+    }, {});
+
+    return Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => ({
+        label,
+        color: CATEGORY_COLORS[label] || '#6366f1',
+        count,
+      }));
+  })();
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Scatter controls */}
@@ -633,6 +689,28 @@ export function ScatterView() {
               if (isDrawingLasso) closeLasso();
             }}
           />
+
+          {/* Color legend */}
+          <div className="absolute top-3 right-3 z-10 w-[180px] rounded-md border border-[#1e2030] bg-[#0f1117]/90 p-2 shadow-lg backdrop-blur-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] font-medium text-[#8b8ea8]">颜色图例</span>
+              <span className="text-[9px] text-[#555872]">{images.length} 张</span>
+            </div>
+            <div className="max-h-[210px] space-y-1 overflow-y-auto pr-1">
+              {legendItems.map((item) => (
+                <div key={item.label} className="flex items-center gap-1.5 text-[10px]">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[#8b8ea8]">{item.label}</span>
+                  {item.count !== null && (
+                    <span className="font-mono text-[#555872]">{item.count}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Tooltip */}
           {hoveredPoint && !isDraggingRect && !isDrawingLasso && !isDrawingPolygon && (
