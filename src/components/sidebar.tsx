@@ -3,9 +3,6 @@
 import { useGalleryStore } from '@/lib/store';
 import {
   CATEGORIES,
-  CATEGORY_COLORS,
-  datasetInfo,
-  SEMANTIC_COLORS,
   SEMANTIC_LABELS,
   SEMANTIC_OPTIONS,
   SEMANTIC_VALUE_LABELS,
@@ -18,23 +15,10 @@ export function Sidebar() {
   const {
     filters,
     toggleCategory,
+    toggleSplit,
     images,
     toggleSemanticFilter,
-    getFilteredImages,
   } = useGalleryStore();
-
-  const filteredImages = getFilteredImages();
-  const filteredAnnotationCount = filteredImages.reduce(
-    (sum, img) => sum + img.detections.length,
-    0
-  );
-  const filteredCategoryCount = new Set(
-    filteredImages.flatMap((img) => img.detections.map((det) => det.label))
-  ).size;
-  const selectedSemanticFilterCount = Object.values(filters.selectedSemantics).reduce(
-    (sum, values) => sum + values.length,
-    0
-  );
 
   // Count annotations per category
   const categoryCounts: Record<string, number> = {};
@@ -43,6 +27,11 @@ export function Sidebar() {
       categoryCounts[det.label] = (categoryCounts[det.label] || 0) + 1;
     }
   }
+
+  const splitCounts = images.reduce<Record<string, number>>((counts, img) => {
+    counts[img.split] = (counts[img.split] || 0) + 1;
+    return counts;
+  }, {});
 
   // Count images by semantic attribute.
   const semanticCounts: Record<keyof SemanticAttributes, Record<string, number>> = {
@@ -62,37 +51,47 @@ export function Sidebar() {
 
   return (
     <aside className="w-[260px] border-r border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
-      {/* Dataset Overview */}
+      {/* Dataset Splits */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          数据概览
+          数据划分
         </h3>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded bg-[#161822]/60 px-2 py-2">
-            <span className="block text-[9px] text-[#555872]">当前图片</span>
-            <span className="text-sm font-semibold text-[#e2e4f0]">
-              {filteredImages.length}
-            </span>
-            <span className="ml-1 text-[10px] text-[#555872]">/ {images.length}</span>
-          </div>
-          <div className="rounded bg-[#161822]/60 px-2 py-2">
-            <span className="block text-[9px] text-[#555872]">当前标注</span>
-            <span className="text-sm font-semibold text-[#e2e4f0]">
-              {filteredAnnotationCount}
-            </span>
-          </div>
-          <div className="rounded bg-[#161822]/60 px-2 py-2">
-            <span className="block text-[9px] text-[#555872]">覆盖类别</span>
-            <span className="text-sm font-semibold text-[#e2e4f0]">
-              {filteredCategoryCount}
-            </span>
-          </div>
-          <div className="rounded bg-[#161822]/60 px-2 py-2">
-            <span className="block text-[9px] text-[#555872]">语义筛选</span>
-            <span className="text-sm font-semibold text-[#e2e4f0]">
-              {selectedSemanticFilterCount}
-            </span>
-          </div>
+        <div className="space-y-1">
+          {(['train', 'validation', 'test'] as const).map((split) => {
+            const checked = filters.selectedSplits.includes(split);
+            return (
+              <label
+                key={split}
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors',
+                  checked ? 'bg-[#161822]' : 'hover:bg-[#161822]/50'
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleSplit(split)}
+                  className="sr-only"
+                />
+                <span
+                  className={cn(
+                    'w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all',
+                    checked ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
+                  )}
+                >
+                  {checked && (
+                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </span>
+                <span className={cn('text-xs flex-1', checked ? 'text-[#e2e4f0]' : 'text-[#555872]')}>
+                  {SPLIT_LABELS[split]}
+                </span>
+                <span className="text-[10px] text-[#555872] font-mono">{splitCounts[split] || 0}</span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -122,9 +121,8 @@ export function Sidebar() {
                 <span
                   className={cn(
                     'w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all',
-                    checked ? 'border-transparent' : 'border-[#2a2d42]'
+                    checked ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
                   )}
-                  style={{ backgroundColor: checked ? CATEGORY_COLORS[cat] : 'transparent' }}
                 >
                   {checked && (
                     <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 12 12" fill="none">
@@ -173,9 +171,17 @@ export function Sidebar() {
                       )}
                     >
                       <span
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{ backgroundColor: SEMANTIC_COLORS[key][value] }}
-                      />
+                        className={cn(
+                          'flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border',
+                          active ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
+                        )}
+                      >
+                        {active && (
+                          <svg className="h-2 w-2 text-white" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </span>
                       <span>{SEMANTIC_VALUE_LABELS[key][value]}</span>
                       <span className="text-[#555872] font-mono">{count}</span>
                     </button>
@@ -184,81 +190,6 @@ export function Sidebar() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* Category Distribution */}
-      <div className="p-4 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          类别分布
-        </h3>
-        <div className="space-y-2">
-          {CATEGORIES.filter((c) => categoryCounts[c]).map((cat) => {
-            const count = categoryCounts[cat] || 0;
-            const maxCount = Math.max(...Object.values(categoryCounts));
-            const pct = (count / maxCount) * 100;
-            return (
-              <div key={cat} className="flex items-center gap-2">
-                <span className="text-[10px] text-[#8b8ea8] w-16 truncate">{cat}</span>
-                <div className="flex-1 h-2 bg-[#161822] rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor: CATEGORY_COLORS[cat],
-                      opacity: 0.8,
-                    }}
-                  />
-                </div>
-                <span className="text-[10px] text-[#555872] font-mono w-6 text-right">{count}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Split Distribution */}
-      <div className="p-4">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          数据集划分
-        </h3>
-        <div className="flex items-center gap-1 h-3 rounded-full overflow-hidden bg-[#161822]">
-          {Object.entries(datasetInfo.splits).map(([split, count]) => {
-            const pct = (count / datasetInfo.imageCount) * 100;
-            const colors: Record<string, string> = {
-              train: '#3b82f6',
-              validation: '#f59e0b',
-              test: '#10b981',
-            };
-            return (
-              <div
-                key={split}
-                className="h-full transition-all duration-300"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: colors[split],
-                }}
-                title={`${SPLIT_LABELS[split]}: ${count} (${pct.toFixed(1)}%)`}
-              />
-            );
-          })}
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          {Object.entries(datasetInfo.splits).map(([split, count]) => {
-            const colors: Record<string, string> = {
-              train: '#3b82f6',
-              validation: '#f59e0b',
-              test: '#10b981',
-            };
-            return (
-              <div key={split} className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[split] }} />
-                <span className="text-[10px] text-[#8b8ea8]">
-                  {SPLIT_LABELS[split]}: {count}
-                </span>
-              </div>
-            );
-          })}
         </div>
       </div>
     </aside>

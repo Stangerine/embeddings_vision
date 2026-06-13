@@ -14,17 +14,129 @@ import {
 import type { SemanticAttributes } from '@/lib/types';
 
 export function DetailPanel() {
-  const { selectedImageId, images, selectImage } = useGalleryStore();
+  const { selectedImageId, images, selectImage, getFilteredImages, colorByMode } = useGalleryStore();
 
   const selectedImage = images.find((img) => img.id === selectedImageId);
+  const filteredImages = getFilteredImages();
+
+  const filteredAnnotationCount = filteredImages.reduce(
+    (sum, img) => sum + img.detections.length,
+    0
+  );
+  const filteredCategoryCounts = filteredImages.reduce<Record<string, number>>((counts, img) => {
+    for (const det of img.detections) {
+      counts[det.label] = (counts[det.label] || 0) + 1;
+    }
+    return counts;
+  }, {});
+  const topCategories = Object.entries(filteredCategoryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+  const splitCounts = filteredImages.reduce<Record<string, number>>((counts, img) => {
+    counts[img.split] = (counts[img.split] || 0) + 1;
+    return counts;
+  }, {});
+  const timeCounts = filteredImages.reduce<Record<string, number>>((counts, img) => {
+    const value = img.metadata.semantics.timeOfDay;
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {});
+  const environmentCounts = filteredImages.reduce<Record<string, number>>((counts, img) => {
+    const value = img.metadata.semantics.environment;
+    counts[value] = (counts[value] || 0) + 1;
+    return counts;
+  }, {});
+
+  const colorModeLabel: Record<string, string> = {
+    category: '类别',
+    split: '划分',
+    confidence: '置信度',
+    lighting: SEMANTIC_LABELS.lighting,
+    viewpoint: SEMANTIC_LABELS.viewpoint,
+    blur: SEMANTIC_LABELS.blur,
+    weather: SEMANTIC_LABELS.weather,
+    timeOfDay: SEMANTIC_LABELS.timeOfDay,
+    environment: SEMANTIC_LABELS.environment,
+    cluster: '聚类',
+  };
 
   if (!selectedImage) {
     return (
-      <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] flex items-center justify-center shrink-0">
-        <div className="text-center px-4">
-          <div className="text-2xl mb-2 opacity-20">◉</div>
-          <p className="text-xs text-[#555872]">选择一张图片查看详情</p>
+      <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
+        <div className="px-4 py-3 border-b border-[#1e2030]">
+          <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
+            当前分布概览
+          </h3>
+          <p className="mt-1 text-[10px] text-[#555872]">
+            点击散点或图片可查看单图详情
+          </p>
         </div>
+
+        <div className="px-4 py-3 border-b border-[#1e2030]">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded bg-[#161822]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#555872]">图片</span>
+              <span className="text-sm font-semibold text-[#e2e4f0]">{filteredImages.length}</span>
+            </div>
+            <div className="rounded bg-[#161822]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#555872]">标注</span>
+              <span className="text-sm font-semibold text-[#e2e4f0]">{filteredAnnotationCount}</span>
+            </div>
+            <div className="rounded bg-[#161822]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#555872]">着色</span>
+              <span className="text-sm font-semibold text-[#e2e4f0]">
+                {colorModeLabel[colorByMode]}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <OverviewSection title="类别 Top 分布">
+          {topCategories.map(([label, count]) => {
+            const pct = filteredAnnotationCount > 0 ? (count / filteredAnnotationCount) * 100 : 0;
+            return (
+              <OverviewBar key={label} label={label} count={count} pct={pct} />
+            );
+          })}
+        </OverviewSection>
+
+        <OverviewSection title="数据集划分">
+          {(['train', 'validation', 'test'] as const).map((split) => {
+            const count = splitCounts[split] || 0;
+            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
+            return (
+              <OverviewBar key={split} label={SPLIT_LABELS[split]} count={count} pct={pct} />
+            );
+          })}
+        </OverviewSection>
+
+        <OverviewSection title="时段分布">
+          {Object.entries(timeCounts).map(([value, count]) => {
+            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
+            return (
+              <OverviewBar
+                key={value}
+                label={SEMANTIC_VALUE_LABELS.timeOfDay[value]}
+                count={count}
+                pct={pct}
+              />
+            );
+          })}
+        </OverviewSection>
+
+        <OverviewSection title="环境分布">
+          {Object.entries(environmentCounts).map(([value, count]) => {
+            const pct = filteredImages.length > 0 ? (count / filteredImages.length) * 100 : 0;
+            return (
+              <OverviewBar
+                key={value}
+                label={SEMANTIC_VALUE_LABELS.environment[value]}
+                count={count}
+                pct={pct}
+              />
+            );
+          })}
+        </OverviewSection>
       </aside>
     );
   }
@@ -299,5 +411,47 @@ export function DetailPanel() {
         </div>
       </div>
     </aside>
+  );
+}
+
+function OverviewSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="px-4 py-3 border-b border-[#1e2030]">
+      <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
+        {title}
+      </h4>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
+function OverviewBar({
+  label,
+  count,
+  pct,
+}: {
+  label: string;
+  count: number;
+  pct: number;
+}) {
+  const barWidth = count > 0 ? Math.max(2, pct) : 0;
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 truncate text-[10px] text-[#8b8ea8]">{label}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#161822]">
+        <div
+          className="h-full rounded-full bg-[#6366f1]/70"
+          style={{ width: `${barWidth}%` }}
+        />
+      </div>
+      <span className="w-8 text-right font-mono text-[10px] text-[#555872]">{count}</span>
+    </div>
   );
 }

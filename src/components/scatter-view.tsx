@@ -75,6 +75,7 @@ export function ScatterView() {
 
   // Show selected panel
   const [showSelectedPanel, setShowSelectedPanel] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
 
   const {
     getFilteredImages,
@@ -574,6 +575,9 @@ export function ScatterView() {
         count,
       }));
   })();
+  const activeColorLabel = colorModes.find((cm) => cm.mode === colorByMode)?.label || '类别';
+  const legendSummary = legendItems.slice(0, 3);
+  const remainingLegendCount = Math.max(legendItems.length - legendSummary.length, 0);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -691,25 +695,54 @@ export function ScatterView() {
           />
 
           {/* Color legend */}
-          <div className="absolute top-3 right-3 z-10 w-[180px] rounded-md border border-[#1e2030] bg-[#0f1117]/90 p-2 shadow-lg backdrop-blur-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-medium text-[#8b8ea8]">颜色图例</span>
-              <span className="text-[9px] text-[#555872]">{images.length} 张</span>
-            </div>
-            <div className="max-h-[210px] space-y-1 overflow-y-auto pr-1">
-              {legendItems.map((item) => (
-                <div key={item.label} className="flex items-center gap-1.5 text-[10px]">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[#8b8ea8]">{item.label}</span>
-                  {item.count !== null && (
-                    <span className="font-mono text-[#555872]">{item.count}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+          <div className="absolute top-3 right-3 z-10 max-w-[360px] rounded-md border border-[#1e2030] bg-[#0f1117]/90 px-2.5 py-2 shadow-lg backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={() => setShowLegend((value) => !value)}
+              className="flex w-full items-center gap-2 text-left"
+            >
+              <span className="shrink-0 text-[10px] font-medium text-[#8b8ea8]">
+                着色：{activeColorLabel}
+              </span>
+              <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                {legendSummary.map((item) => (
+                  <span key={item.label} className="flex min-w-0 items-center gap-1 text-[10px]">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="truncate text-[#8b8ea8]">{item.label}</span>
+                    {item.count !== null && (
+                      <span className="font-mono text-[#555872]">{item.count}</span>
+                    )}
+                  </span>
+                ))}
+                {remainingLegendCount > 0 && (
+                  <span className="shrink-0 text-[10px] text-[#555872]">
+                    +{remainingLegendCount}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 text-[10px] text-[#555872]">
+                {showLegend ? '收起' : '展开'}
+              </span>
+            </button>
+            {showLegend && (
+              <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto border-t border-[#1e2030] pt-2">
+                {legendItems.map((item) => (
+                  <div key={item.label} className="flex items-center gap-1.5 text-[10px]">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[#8b8ea8]">{item.label}</span>
+                    {item.count !== null && (
+                      <span className="font-mono text-[#555872]">{item.count}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Tooltip */}

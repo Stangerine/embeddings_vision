@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { ViewMode, ColorByMode, FilterState, DatasetImage, SemanticAttributes } from './types';
-import { mockImages, CATEGORIES, SEMANTIC_LABELS, SEMANTIC_VALUE_LABELS } from './mock-data';
+import {
+  mockImages,
+  CATEGORIES,
+  SEMANTIC_LABELS,
+  SEMANTIC_OPTIONS,
+  SEMANTIC_VALUE_LABELS,
+} from './mock-data';
 
 interface GalleryState {
   // Data
@@ -49,7 +55,14 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
     selectedCategories: [...CATEGORIES],
     selectedSplits: ['train', 'validation', 'test'],
     selectedTags: [],
-    selectedSemantics: {},
+    selectedSemantics: {
+      lighting: [...SEMANTIC_OPTIONS.lighting],
+      viewpoint: [...SEMANTIC_OPTIONS.viewpoint],
+      blur: [...SEMANTIC_OPTIONS.blur],
+      weather: [...SEMANTIC_OPTIONS.weather],
+      timeOfDay: [...SEMANTIC_OPTIONS.timeOfDay],
+      environment: [...SEMANTIC_OPTIONS.environment],
+    },
     searchQuery: '',
   },
   scatterSelection: [],

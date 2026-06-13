@@ -1,7 +1,7 @@
 'use client';
 
 import { useGalleryStore } from '@/lib/store';
-import { datasetInfo, SPLIT_COLORS, SPLIT_LABELS } from '@/lib/mock-data';
+import { datasetInfo } from '@/lib/mock-data';
 import type { ViewMode } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -33,36 +33,6 @@ export function TopBar() {
             {datasetInfo.name}
           </span>
         </div>
-      </div>
-
-      {/* Split Tabs */}
-      <div className="flex items-center gap-1 bg-[#161822] rounded-md p-0.5">
-        {(['train', 'validation', 'test'] as const).map((split) => {
-          const active = filters.selectedSplits.includes(split);
-          const count = datasetInfo.splits[split];
-          return (
-            <button
-              key={split}
-              onClick={() => {
-                const store = useGalleryStore.getState();
-                store.toggleSplit(split);
-              }}
-              className={cn(
-                'px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 flex items-center gap-1.5',
-                active
-                  ? 'bg-[#1e2030] text-[#e2e4f0]'
-                  : 'text-[#555872] hover:text-[#8b8ea8]'
-              )}
-            >
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: active ? SPLIT_COLORS[split] : '#555872' }}
-              />
-              {SPLIT_LABELS[split]}
-              <span className="text-[#555872] ml-0.5">{count}</span>
-            </button>
-          );
-        })}
       </div>
 
       {/* View Mode Toggle */}
