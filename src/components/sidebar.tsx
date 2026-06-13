@@ -8,6 +8,8 @@ import {
   SEMANTIC_COLORS,
   SEMANTIC_LABELS,
   SEMANTIC_OPTIONS,
+  SEMANTIC_VALUE_LABELS,
+  SPLIT_LABELS,
 } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import type { SemanticAttributes } from '@/lib/types';
@@ -29,7 +31,7 @@ export function Sidebar() {
     }
   }
 
-  // Collect all unique tags
+  // Count images by semantic attribute.
   const semanticCounts: Record<keyof SemanticAttributes, Record<string, number>> = {
     lighting: {},
     viewpoint: {},
@@ -50,7 +52,7 @@ export function Sidebar() {
       {/* Categories */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          Categories
+          目标类别
         </h3>
         <div className="space-y-1">
           {CATEGORIES.map((cat) => {
@@ -99,7 +101,7 @@ export function Sidebar() {
       {/* Confidence Range */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          Confidence Range
+          置信度范围
         </h3>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[#555872] font-mono w-8 text-right">
@@ -138,7 +140,7 @@ export function Sidebar() {
       {/* Semantic Attributes */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          Semantic Attributes
+          语义属性
         </h3>
         <div className="space-y-4">
           {(Object.keys(SEMANTIC_OPTIONS) as (keyof SemanticAttributes)[]).map((key) => (
@@ -166,7 +168,7 @@ export function Sidebar() {
                         className="h-2 w-2 rounded-full shrink-0"
                         style={{ backgroundColor: SEMANTIC_COLORS[key][value] }}
                       />
-                      <span>{value}</span>
+                      <span>{SEMANTIC_VALUE_LABELS[key][value]}</span>
                       <span className="text-[#555872] font-mono">{count}</span>
                     </button>
                   );
@@ -180,7 +182,7 @@ export function Sidebar() {
       {/* Category Distribution */}
       <div className="p-4 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          Distribution
+          类别分布
         </h3>
         <div className="space-y-2">
           {CATEGORIES.filter((c) => categoryCounts[c]).map((cat) => {
@@ -210,7 +212,7 @@ export function Sidebar() {
       {/* Split Distribution */}
       <div className="p-4">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
-          Split Distribution
+          数据集划分
         </h3>
         <div className="flex items-center gap-1 h-3 rounded-full overflow-hidden bg-[#161822]">
           {Object.entries(datasetInfo.splits).map(([split, count]) => {
@@ -228,7 +230,7 @@ export function Sidebar() {
                   width: `${pct}%`,
                   backgroundColor: colors[split],
                 }}
-                title={`${split}: ${count} (${pct.toFixed(1)}%)`}
+                title={`${SPLIT_LABELS[split]}: ${count} (${pct.toFixed(1)}%)`}
               />
             );
           })}
@@ -244,7 +246,7 @@ export function Sidebar() {
               <div key={split} className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[split] }} />
                 <span className="text-[10px] text-[#8b8ea8]">
-                  {split.slice(0, 3)}: {count}
+                  {SPLIT_LABELS[split]}: {count}
                 </span>
               </div>
             );

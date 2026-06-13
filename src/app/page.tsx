@@ -44,25 +44,25 @@ function StatusBar() {
   return (
     <footer className="h-[32px] border-t border-[#1e2030] bg-[#0f1117] flex items-center px-4 gap-6 shrink-0">
       <span className="text-[10px] text-[#555872]">
-        View: <span className="text-[#8b8ea8]">{viewMode === 'grid' ? 'Grid' : 'Embedding Scatter'}</span>
+        当前视图: <span className="text-[#8b8ea8]">{viewMode === 'grid' ? '图库' : '向量分布'}</span>
       </span>
       <span className="text-[10px] text-[#555872]">
-        Images: <span className="text-[#8b8ea8]">{filtered.length}</span>
+        图片: <span className="text-[#8b8ea8]">{filtered.length}</span>
       </span>
       <span className="text-[10px] text-[#555872]">
-        Annotations: <span className="text-[#8b8ea8]">{totalAnnotations}</span>
+        标注: <span className="text-[#8b8ea8]">{totalAnnotations}</span>
       </span>
       <span className="text-[10px] text-[#555872]">
-        Categories: <span className="text-[#8b8ea8]">{categories.size}</span>
+        类别: <span className="text-[#8b8ea8]">{categories.size}</span>
       </span>
       {scatterSelection.length > 0 && (
         <span className="text-[10px] text-[#6366f1]">
-          Selected: <span className="font-medium">{scatterSelection.length}</span>
+          已选: <span className="font-medium">{scatterSelection.length}</span>
         </span>
       )}
       <div className="flex-1" />
       <span className="text-[10px] text-[#555872]">
-        Detection Gallery v1.0
+        数据集分析台 v1.0
       </span>
     </footer>
   );

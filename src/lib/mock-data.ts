@@ -25,6 +25,18 @@ export const SPLIT_COLORS: Record<string, string> = {
   test: '#10b981',
 };
 
+export const SPLIT_LABELS: Record<string, string> = {
+  train: '训练集',
+  validation: '验证集',
+  test: '测试集',
+};
+
+export const SPLIT_SHORT_LABELS: Record<string, string> = {
+  train: '训',
+  validation: '验',
+  test: '测',
+};
+
 export const SEMANTIC_OPTIONS: Record<keyof SemanticAttributes, string[]> = {
   lighting: ['bright', 'dim', 'backlit', 'low-light', 'mixed'],
   viewpoint: ['front', 'side', 'rear', 'top-down', 'aerial', 'wide', 'close-up'],
@@ -35,12 +47,58 @@ export const SEMANTIC_OPTIONS: Record<keyof SemanticAttributes, string[]> = {
 };
 
 export const SEMANTIC_LABELS: Record<keyof SemanticAttributes, string> = {
-  lighting: 'Lighting',
-  viewpoint: 'Viewpoint',
-  blur: 'Sharpness',
-  weather: 'Weather',
-  timeOfDay: 'Time',
-  environment: 'Environment',
+  lighting: '光照',
+  viewpoint: '视角',
+  blur: '清晰度',
+  weather: '天气',
+  timeOfDay: '时段',
+  environment: '环境',
+};
+
+export const SEMANTIC_VALUE_LABELS: Record<keyof SemanticAttributes, Record<string, string>> = {
+  lighting: {
+    bright: '明亮',
+    dim: '偏暗',
+    backlit: '逆光',
+    'low-light': '弱光',
+    mixed: '混合光',
+  },
+  viewpoint: {
+    front: '正面',
+    side: '侧面',
+    rear: '背面',
+    'top-down': '俯视',
+    aerial: '航拍',
+    wide: '广角',
+    'close-up': '近景',
+  },
+  blur: {
+    sharp: '清晰',
+    'slight-blur': '轻微模糊',
+    'motion-blur': '运动模糊',
+    'out-of-focus': '失焦',
+  },
+  weather: {
+    clear: '晴朗',
+    cloudy: '多云',
+    rain: '雨天',
+    snow: '雪天',
+    fog: '雾天',
+    indoor: '室内',
+  },
+  timeOfDay: {
+    day: '白天',
+    dusk: '黄昏',
+    night: '夜间',
+  },
+  environment: {
+    indoor: '室内',
+    outdoor: '户外',
+    urban: '城市',
+    rural: '乡村',
+    road: '道路',
+    aerial: '空中',
+  },
 };
 
 export const SEMANTIC_COLORS: Record<keyof SemanticAttributes, Record<string, string>> = {
@@ -284,8 +342,8 @@ export const mockImages: DatasetImage[] = Array.from({ length: TOTAL_IMAGES }, (
 
 export const datasetInfo: DatasetInfo = {
   id: 'ds-001',
-  name: 'Detection Dataset v2.1',
-  description: 'Multi-scene object detection dataset with 10 categories',
+  name: '目标检测数据集 v2.1',
+  description: '覆盖多场景、多语义属性的目标检测数据集',
   imageCount: TOTAL_IMAGES,
   annotationCount: mockImages.reduce((sum, img) => sum + img.detections.length, 0),
   categories: CATEGORIES,

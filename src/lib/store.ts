@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ViewMode, ColorByMode, FilterState, DatasetImage, SemanticAttributes } from './types';
-import { mockImages, CATEGORIES } from './mock-data';
+import { mockImages, CATEGORIES, SEMANTIC_LABELS, SEMANTIC_VALUE_LABELS } from './mock-data';
 
 interface GalleryState {
   // Data
@@ -146,9 +146,14 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         const matchesFilename = img.filename.toLowerCase().includes(q);
         const matchesCategory = img.detections.some((d) => d.label.toLowerCase().includes(q));
         const matchesTag = img.metadata.tags.some((t) => t.toLowerCase().includes(q));
-        const matchesSemantics = Object.values(img.metadata.semantics).some((value) =>
-          value.toLowerCase().includes(q)
-        );
+        const matchesSemantics = Object.entries(img.metadata.semantics).some(([key, value]) => {
+          const semanticKey = key as keyof SemanticAttributes;
+          return (
+            value.toLowerCase().includes(q) ||
+            SEMANTIC_LABELS[semanticKey].toLowerCase().includes(q) ||
+            SEMANTIC_VALUE_LABELS[semanticKey][value].toLowerCase().includes(q)
+          );
+        });
         if (!matchesFilename && !matchesCategory && !matchesTag && !matchesSemantics) return false;
       }
       

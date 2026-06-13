@@ -5,9 +5,11 @@ import {
   CATEGORY_COLORS,
   SEMANTIC_COLORS,
   SEMANTIC_LABELS,
+  SEMANTIC_VALUE_LABELS,
   getImageUrl,
   getConfidenceColor,
   SPLIT_COLORS,
+  SPLIT_LABELS,
 } from '@/lib/mock-data';
 import type { SemanticAttributes } from '@/lib/types';
 
@@ -21,7 +23,7 @@ export function DetailPanel() {
       <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] flex items-center justify-center shrink-0">
         <div className="text-center px-4">
           <div className="text-2xl mb-2 opacity-20">◉</div>
-          <p className="text-xs text-[#555872]">Select an image to view details</p>
+          <p className="text-xs text-[#555872]">选择一张图片查看详情</p>
         </div>
       </aside>
     );
@@ -40,12 +42,19 @@ export function DetailPanel() {
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 6);
 
+  const getTagLabel = (tag: string): string => {
+    for (const labels of Object.values(SEMANTIC_VALUE_LABELS)) {
+      if (labels[tag]) return labels[tag];
+    }
+    return tag;
+  };
+
   return (
     <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e2030]">
         <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
-          Image Details
+          图片详情
         </h3>
         <button
           onClick={() => selectImage(null)}
@@ -121,33 +130,33 @@ export function DetailPanel() {
       <div className="px-4 py-3 border-b border-[#1e2030]">
         <div className="grid grid-cols-2 gap-2 text-[10px]">
           <div>
-            <span className="text-[#555872]">Filename</span>
+            <span className="text-[#555872]">文件名</span>
             <p className="text-[#e2e4f0] font-mono truncate">{selectedImage.filename}</p>
           </div>
           <div>
-            <span className="text-[#555872]">Dimensions</span>
+            <span className="text-[#555872]">尺寸</span>
             <p className="text-[#e2e4f0] font-mono">{selectedImage.width} x {selectedImage.height}</p>
           </div>
           <div>
-            <span className="text-[#555872]">Split</span>
+            <span className="text-[#555872]">划分</span>
             <p className="flex items-center gap-1">
               <span
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: SPLIT_COLORS[selectedImage.split] }}
               />
-              <span className="text-[#e2e4f0] capitalize">{selectedImage.split}</span>
+              <span className="text-[#e2e4f0]">{SPLIT_LABELS[selectedImage.split]}</span>
             </p>
           </div>
           <div>
-            <span className="text-[#555872]">Source</span>
+            <span className="text-[#555872]">来源</span>
             <p className="text-[#e2e4f0]">{selectedImage.metadata.source}</p>
           </div>
           <div>
-            <span className="text-[#555872]">Date</span>
+            <span className="text-[#555872]">日期</span>
             <p className="text-[#e2e4f0] font-mono">{selectedImage.metadata.captureDate}</p>
           </div>
           <div>
-            <span className="text-[#555872]">Embedding</span>
+            <span className="text-[#555872]">向量坐标</span>
             <p className="text-[#e2e4f0] font-mono">
               [{selectedImage.embedding2d[0].toFixed(2)}, {selectedImage.embedding2d[1].toFixed(2)}]
             </p>
@@ -160,7 +169,7 @@ export function DetailPanel() {
               key={tag}
               className="text-[9px] px-1.5 py-0.5 rounded bg-[#161822] text-[#8b8ea8] border border-[#1e2030]"
             >
-              {tag}
+              {getTagLabel(tag)}
             </span>
           ))}
         </div>
@@ -169,7 +178,7 @@ export function DetailPanel() {
       {/* Semantic Attributes */}
       <div className="px-4 py-3 border-b border-[#1e2030]">
         <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
-          Semantic Attributes
+          语义属性
         </h4>
         <div className="grid grid-cols-2 gap-1.5">
           {(Object.keys(selectedImage.metadata.semantics) as (keyof SemanticAttributes)[]).map((key) => {
@@ -184,7 +193,7 @@ export function DetailPanel() {
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: SEMANTIC_COLORS[key][value] }}
                   />
-                  {value}
+                  {SEMANTIC_VALUE_LABELS[key][value]}
                 </span>
               </div>
             );
@@ -195,15 +204,15 @@ export function DetailPanel() {
       {/* Detections Table */}
       <div className="px-4 py-3 border-b border-[#1e2030]">
         <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
-          Detections ({selectedImage.detections.length})
+          检测结果（{selectedImage.detections.length}）
         </h4>
         <div className="space-y-1">
           {/* Table header */}
           <div className="grid grid-cols-[1fr_60px_60px_50px] gap-1 text-[9px] text-[#555872] uppercase px-2 py-1">
-            <span>Label</span>
-            <span className="text-right">Conf</span>
+            <span>类别</span>
+            <span className="text-right">置信度</span>
             <span className="text-right">BBox</span>
-            <span className="text-right">Type</span>
+            <span className="text-right">类型</span>
           </div>
           {selectedImage.detections.map((det) => (
             <div
@@ -230,7 +239,7 @@ export function DetailPanel() {
                 {det.isGroundTruth ? (
                   <span className="text-[#10b981] text-[9px]">GT</span>
                 ) : (
-                  <span className="text-[#f59e0b] text-[9px]">Pred</span>
+                  <span className="text-[#f59e0b] text-[9px]">预测</span>
                 )}
               </span>
             </div>
@@ -241,7 +250,7 @@ export function DetailPanel() {
       {/* Similar Images */}
       <div className="px-4 py-3">
         <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
-          Similar Images (Embedding)
+          相似图片（向量距离）
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
           {similarImages.map(({ image, distance }) => (

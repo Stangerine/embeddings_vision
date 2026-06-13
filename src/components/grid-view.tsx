@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useCallback } from 'react';
 import { useGalleryStore } from '@/lib/store';
-import { CATEGORY_COLORS, getImageUrl, getConfidenceColor } from '@/lib/mock-data';
+import { CATEGORY_COLORS, SPLIT_SHORT_LABELS, getImageUrl } from '@/lib/mock-data';
 import type { DatasetImage, BoundingBox } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -136,14 +136,14 @@ function ImageCard({ image }: { image: DatasetImage }) {
               image.split === 'validation' ? 'text-amber-400' : 'text-emerald-400'
             )}
           >
-            {image.split.slice(0, 3).toUpperCase()}
+            {SPLIT_SHORT_LABELS[image.split]}
           </span>
         </div>
 
         {/* Detection count */}
         <div className="absolute bottom-1.5 left-1.5">
           <span className="text-[9px] font-mono text-[#8b8ea8] bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded">
-            {image.detections.length} det
+            {image.detections.length} 个标注
           </span>
         </div>
       </div>
@@ -184,10 +184,10 @@ export function GridView() {
       {/* Grid controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e2030]">
         <span className="text-xs text-[#8b8ea8]">
-          {filteredImages.length} images
+          共 {filteredImages.length} 张图片
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#555872]">Density</span>
+          <span className="text-[10px] text-[#555872]">密度</span>
           <input
             type="range"
             min="2"
@@ -206,7 +206,7 @@ export function GridView() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-3xl mb-2 opacity-30">⊘</div>
-              <p className="text-sm text-[#555872]">No images match current filters</p>
+              <p className="text-sm text-[#555872]">没有符合当前筛选条件的图片</p>
             </div>
           </div>
         ) : (

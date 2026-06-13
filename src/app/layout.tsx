@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Detection Gallery',
-  description: 'Object Detection Dataset Visualization & Analysis Tool',
+  title: '目标检测数据集分析',
+  description: '目标检测数据集可视化与语义切分分析工具',
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="zh-CN" className="dark">
       <body className="antialiased bg-[#08090d] text-[#e2e4f0]">
         {children}
       </body>

@@ -6,7 +6,10 @@ import {
   CATEGORY_COLORS,
   SEMANTIC_COLORS,
   SEMANTIC_LABELS,
+  SEMANTIC_VALUE_LABELS,
   SPLIT_COLORS,
+  SPLIT_LABELS,
+  SPLIT_SHORT_LABELS,
   getConfidenceColorScale,
   getImageUrl,
 } from '@/lib/mock-data';
@@ -493,9 +496,9 @@ export function ScatterView() {
   }, [activeTool, polygonVertices, closePolygon]);
 
   const colorModes: { mode: ColorByMode; label: string }[] = [
-    { mode: 'category', label: 'Category' },
-    { mode: 'split', label: 'Split' },
-    { mode: 'confidence', label: 'Confidence' },
+    { mode: 'category', label: '类别' },
+    { mode: 'split', label: '划分' },
+    { mode: 'confidence', label: '置信度' },
     { mode: 'lighting', label: SEMANTIC_LABELS.lighting },
     { mode: 'viewpoint', label: SEMANTIC_LABELS.viewpoint },
     { mode: 'blur', label: SEMANTIC_LABELS.blur },
@@ -505,9 +508,9 @@ export function ScatterView() {
   ];
 
   const tools: { tool: SelectionTool; label: string; icon: string; hint: string }[] = [
-    { tool: 'rect', label: 'Rect', icon: '▭', hint: 'Drag to select' },
-    { tool: 'polygon', label: 'Polygon', icon: '⬡', hint: 'Click vertices, dbl-click/Enter to close' },
-    { tool: 'lasso', label: 'Lasso', icon: '◌', hint: 'Draw freeform, release to close' },
+    { tool: 'rect', label: '矩形', icon: '▭', hint: '拖拽框选' },
+    { tool: 'polygon', label: '多边形', icon: '⬡', hint: '点击添加顶点，双击或 Enter 完成' },
+    { tool: 'lasso', label: '套索', icon: '◌', hint: '按住绘制自由轮廓，松开完成' },
   ];
 
   const getCursorClass = (): string => {
@@ -523,7 +526,7 @@ export function ScatterView() {
         <div className="flex items-center gap-3">
           {/* Color mode */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[#555872] uppercase tracking-wider">Color</span>
+            <span className="text-[10px] text-[#555872] uppercase tracking-wider">着色</span>
             {colorModes.map((cm) => (
               <button
                 key={cm.mode}
@@ -544,7 +547,7 @@ export function ScatterView() {
 
           {/* Selection tools */}
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-[#555872] uppercase tracking-wider mr-1">Select</span>
+            <span className="text-[10px] text-[#555872] uppercase tracking-wider mr-1">选择</span>
             {tools.map((t) => (
               <button
                 key={t.tool}
@@ -578,7 +581,7 @@ export function ScatterView() {
           {scatterSelection.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-[#6366f1] font-medium">
-                {scatterSelection.length} selected
+                已选 {scatterSelection.length} 张
               </span>
               <button
                 onClick={() => {
@@ -587,7 +590,7 @@ export function ScatterView() {
                 }}
                 className="text-[10px] px-2 py-0.5 rounded bg-[#1e2030] text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#2a2d42] transition-colors"
               >
-                Clear
+                清除
               </button>
               <button
                 onClick={() => setShowSelectedPanel(!showSelectedPanel)}
@@ -598,16 +601,16 @@ export function ScatterView() {
                     : 'bg-[#1e2030] text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#2a2d42]'
                 )}
               >
-                {showSelectedPanel ? 'Hide' : 'Show'} Panel
+                {showSelectedPanel ? '收起' : '展开'}列表
               </button>
             </div>
           )}
           <span className="text-[10px] text-[#555872]">
             {activeTool === 'polygon'
-              ? 'Click to add vertex | Dbl-click/Enter to close | Esc cancel'
+              ? '点击添加顶点 | 双击/Enter 完成 | Esc 取消'
               : activeTool === 'lasso'
-              ? 'Draw & release to select'
-              : 'Drag to select | Click point to inspect'}
+              ? '按住绘制，松开完成选择'
+              : '拖拽框选 | 点击点查看详情'}
           </span>
         </div>
       </div>
@@ -648,20 +651,20 @@ export function ScatterView() {
                   </span>
                 </div>
                 <div className="text-[10px] text-[#8b8ea8] space-y-0.5">
-                  <div>Labels: {hoveredPoint.image.detections.map((d) => d.label).join(', ')}</div>
+                  <div>类别: {hoveredPoint.image.detections.map((d) => d.label).join(', ')}</div>
                   <div>
-                    Split: <span className="text-[#e2e4f0]">{hoveredPoint.image.split}</span>
+                    划分: <span className="text-[#e2e4f0]">{SPLIT_LABELS[hoveredPoint.image.split]}</span>
                   </div>
                   <div>
-                    Semantics:{' '}
+                    语义:{' '}
                     <span className="text-[#e2e4f0]">
-                      {hoveredPoint.image.metadata.semantics.timeOfDay},{' '}
-                      {hoveredPoint.image.metadata.semantics.environment},{' '}
-                      {hoveredPoint.image.metadata.semantics.blur}
+                      {SEMANTIC_VALUE_LABELS.timeOfDay[hoveredPoint.image.metadata.semantics.timeOfDay]},{' '}
+                      {SEMANTIC_VALUE_LABELS.environment[hoveredPoint.image.metadata.semantics.environment]},{' '}
+                      {SEMANTIC_VALUE_LABELS.blur[hoveredPoint.image.metadata.semantics.blur]}
                     </span>
                   </div>
                   <div>
-                    Embedding: [{hoveredPoint.image.embedding2d[0].toFixed(2)},{' '}
+                    向量: [{hoveredPoint.image.embedding2d[0].toFixed(2)},{' '}
                     {hoveredPoint.image.embedding2d[1].toFixed(2)}]
                   </div>
                 </div>
@@ -676,20 +679,20 @@ export function ScatterView() {
             {/* Panel header */}
             <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e2030] shrink-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-[#e2e4f0]">Selected Images</span>
+                <span className="text-xs font-medium text-[#e2e4f0]">已选图片</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#6366f1]/20 text-[#6366f1] font-mono">
                   {selectedImages.length}
                 </span>
               </div>
               <div className="flex items-center gap-3 text-[10px] text-[#555872]">
                 <span>
-                  Categories:{' '}
+                  类别:{' '}
                   <span className="text-[#8b8ea8]">
                     {new Set(selectedImages.flatMap((i) => i.detections.map((d) => d.label))).size}
                   </span>
                 </span>
                 <span>
-                  Annotations:{' '}
+                  标注:{' '}
                   <span className="text-[#8b8ea8]">
                     {selectedImages.reduce((s, i) => s + i.detections.length, 0)}
                   </span>
@@ -801,7 +804,7 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
               : 'text-emerald-400'
           )}
         >
-          {image.split.slice(0, 3).toUpperCase()}
+          {SPLIT_SHORT_LABELS[image.split]}
         </span>
       </div>
     </button>
