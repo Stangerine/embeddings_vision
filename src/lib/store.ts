@@ -51,7 +51,7 @@ interface GalleryState {
 export const useGalleryStore = create<GalleryState>((set, get) => ({
   images: mockImages,
   viewMode: 'grid',
-  colorByMode: 'category',
+  colorByMode: 'split',
   selectedImageId: null,
   activeDataset: 'ds-001',
   filters: {

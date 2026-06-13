@@ -62,10 +62,7 @@ export interface DatasetInfo {
 export type ViewMode = 'grid' | 'scatter';
 
 export type ColorByMode =
-  | 'category'
   | 'split'
-  | 'confidence'
-  | 'cluster'
   | 'lighting'
   | 'viewpoint'
   | 'blur'

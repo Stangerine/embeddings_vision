@@ -10,7 +10,6 @@ import {
   SPLIT_COLORS,
   SPLIT_LABELS,
   SPLIT_SHORT_LABELS,
-  getConfidenceColorScale,
   getImageUrl,
 } from '@/lib/mock-data';
 import type { DatasetImage } from '@/lib/types';
@@ -99,14 +98,8 @@ export function ScatterView() {
   const getPointColor = useCallback(
     (img: DatasetImage): string => {
       switch (colorByMode) {
-        case 'category':
-          return CATEGORY_COLORS[img.detections[0]?.label] || '#6366f1';
         case 'split':
           return SPLIT_COLORS[img.split] || '#6366f1';
-        case 'confidence':
-          return getConfidenceColorScale(img.detections[0]?.confidence || 0.5);
-        case 'cluster':
-          return CATEGORY_COLORS[img.detections[0]?.label] || '#6366f1';
         case 'lighting':
         case 'viewpoint':
         case 'blur':
@@ -115,7 +108,7 @@ export function ScatterView() {
         case 'environment':
           return SEMANTIC_COLORS[colorByMode][img.metadata.semantics[colorByMode]] || '#6366f1';
         default:
-          return '#6366f1';
+          return SEMANTIC_COLORS.timeOfDay[img.metadata.semantics.timeOfDay] || '#6366f1';
       }
     },
     [colorByMode]
@@ -503,9 +496,7 @@ export function ScatterView() {
   }, [activeTool, polygonVertices, closePolygon]);
 
   const colorModes: { mode: ColorByMode; label: string }[] = [
-    { mode: 'category', label: '类别' },
     { mode: 'split', label: '划分' },
-    { mode: 'confidence', label: '置信度' },
     { mode: 'lighting', label: SEMANTIC_LABELS.lighting },
     { mode: 'viewpoint', label: SEMANTIC_LABELS.viewpoint },
     { mode: 'blur', label: SEMANTIC_LABELS.blur },
@@ -527,17 +518,6 @@ export function ScatterView() {
   };
 
   const legendItems: LegendItem[] = (() => {
-    if (colorByMode === 'confidence') {
-      return [
-        { label: '高置信度', color: getConfidenceColorScale(0.9), count: images.filter((img) => (img.detections[0]?.confidence || 0) >= 0.8).length },
-        { label: '中置信度', color: getConfidenceColorScale(0.65), count: images.filter((img) => {
-          const confidence = img.detections[0]?.confidence || 0;
-          return confidence >= 0.5 && confidence < 0.8;
-        }).length },
-        { label: '低置信度', color: getConfidenceColorScale(0.35), count: images.filter((img) => (img.detections[0]?.confidence || 0) < 0.5).length },
-      ];
-    }
-
     if (colorByMode === 'split') {
       return Object.entries(SPLIT_COLORS).map(([split, color]) => ({
         label: SPLIT_LABELS[split],
@@ -561,21 +541,13 @@ export function ScatterView() {
       }));
     }
 
-    const categoryCounts = images.reduce<Record<string, number>>((counts, img) => {
-      const label = img.detections[0]?.label || 'unknown';
-      counts[label] = (counts[label] || 0) + 1;
-      return counts;
-    }, {});
-
-    return Object.entries(categoryCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, count]) => ({
-        label,
-        color: CATEGORY_COLORS[label] || '#6366f1',
-        count,
-      }));
+    return Object.entries(SEMANTIC_COLORS.timeOfDay).map(([value, color]) => ({
+      label: SEMANTIC_VALUE_LABELS.timeOfDay[value],
+      color,
+      count: images.filter((img) => img.metadata.semantics.timeOfDay === value).length,
+    }));
   })();
-  const activeColorLabel = colorModes.find((cm) => cm.mode === colorByMode)?.label || '类别';
+  const activeColorLabel = colorModes.find((cm) => cm.mode === colorByMode)?.label || '划分';
   const legendSummary = legendItems.slice(0, 3);
   const remainingLegendCount = Math.max(legendItems.length - legendSummary.length, 0);
 

@@ -54,16 +54,13 @@ export function DetailPanel() {
     }, {});
 
   const colorModeLabel: Record<ColorByMode, string> = {
-    category: '类别',
     split: '划分',
-    confidence: '置信度',
     lighting: SEMANTIC_LABELS.lighting,
     viewpoint: SEMANTIC_LABELS.viewpoint,
     blur: SEMANTIC_LABELS.blur,
     weather: SEMANTIC_LABELS.weather,
     timeOfDay: SEMANTIC_LABELS.timeOfDay,
     environment: SEMANTIC_LABELS.environment,
-    cluster: '聚类',
   };
   const overviewSections = buildOverviewSections({
     colorByMode,
@@ -450,7 +447,7 @@ function buildOverviewSections({
 }): OverviewSectionData[] {
   const categorySection: OverviewSectionData = {
     title: '类别 Top 分布',
-    active: colorByMode === 'category' || colorByMode === 'cluster',
+    active: false,
     rows: topCategories.map(([label, count]) => ({
       label,
       count,
