@@ -75,29 +75,29 @@ export function DetailPanel() {
 
   if (!selectedImage) {
     return (
-      <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
-        <div className="px-4 py-3 border-b border-[#1e2030]">
-          <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
+      <aside className="w-[320px] border-l border-[#E2E8F0] bg-[#FFFFFF] overflow-y-auto shrink-0 flex flex-col">
+        <div className="px-4 py-3 border-b border-[#E2E8F0]">
+          <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-wider">
             当前分布概览
           </h3>
-          <p className="mt-1 text-[10px] text-[#555872]">
+          <p className="mt-1 text-[10px] text-[#64748B]">
             点击散点或图片可查看单图详情
           </p>
         </div>
 
-        <div className="px-4 py-3 border-b border-[#1e2030]">
+        <div className="px-4 py-3 border-b border-[#E2E8F0]">
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded bg-[#161822]/60 px-2 py-2">
-              <span className="block text-[9px] text-[#555872]">图片</span>
-              <span className="text-sm font-semibold text-[#e2e4f0]">{filteredImages.length}</span>
+            <div className="rounded bg-[#F8FAFC]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#64748B]">图片</span>
+              <span className="text-sm font-semibold text-[#0F172A]">{filteredImages.length}</span>
             </div>
-            <div className="rounded bg-[#161822]/60 px-2 py-2">
-              <span className="block text-[9px] text-[#555872]">标注</span>
-              <span className="text-sm font-semibold text-[#e2e4f0]">{filteredAnnotationCount}</span>
+            <div className="rounded bg-[#F8FAFC]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#64748B]">标注</span>
+              <span className="text-sm font-semibold text-[#0F172A]">{filteredAnnotationCount}</span>
             </div>
-            <div className="rounded bg-[#161822]/60 px-2 py-2">
-              <span className="block text-[9px] text-[#555872]">着色</span>
-              <span className="text-sm font-semibold text-[#e2e4f0]">
+            <div className="rounded bg-[#F8FAFC]/60 px-2 py-2">
+              <span className="block text-[9px] text-[#64748B]">着色</span>
+              <span className="text-sm font-semibold text-[#0F172A]">
                 {colorModeLabel[colorByMode]}
               </span>
             </div>
@@ -136,15 +136,15 @@ export function DetailPanel() {
   };
 
   return (
-    <aside className="w-[320px] border-l border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
+    <aside className="w-[320px] border-l border-[#E2E8F0] bg-[#FFFFFF] overflow-y-auto shrink-0 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#E2E8F0]">
+        <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-wider">
           图片详情
         </h3>
         <button
           onClick={() => selectImage(null)}
-          className="text-[#555872] hover:text-[#e2e4f0] transition-colors"
+          className="text-[#64748B] hover:text-[#0F172A] transition-colors"
         >
           <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -153,8 +153,8 @@ export function DetailPanel() {
       </div>
 
       {/* Preview */}
-      <div className="p-3 border-b border-[#1e2030]">
-        <div className="relative rounded-lg overflow-hidden bg-[#161822]">
+      <div className="p-3 border-b border-[#E2E8F0]">
+        <div className="relative rounded-lg overflow-hidden bg-[#F8FAFC]">
           <img
             src={getImageUrl(selectedImage.id, 600, 400)}
             alt={selectedImage.filename}
@@ -168,7 +168,7 @@ export function DetailPanel() {
           >
             {selectedImage.detections.map((det) => {
               const [x, y, w, h] = det.bbox;
-              const color = CATEGORY_COLORS[det.label] || '#6366f1';
+              const color = CATEGORY_COLORS[det.label] || '#2563EB';
               const px = x * selectedImage.width;
               const py = y * selectedImage.height;
               const pw = w * selectedImage.width;
@@ -213,37 +213,37 @@ export function DetailPanel() {
       </div>
 
       {/* Metadata */}
-      <div className="px-4 py-3 border-b border-[#1e2030]">
+      <div className="px-4 py-3 border-b border-[#E2E8F0]">
         <div className="grid grid-cols-2 gap-2 text-[10px]">
           <div>
-            <span className="text-[#555872]">文件名</span>
-            <p className="text-[#e2e4f0] font-mono truncate">{selectedImage.filename}</p>
+            <span className="text-[#64748B]">文件名</span>
+            <p className="text-[#0F172A] font-mono truncate">{selectedImage.filename}</p>
           </div>
           <div>
-            <span className="text-[#555872]">尺寸</span>
-            <p className="text-[#e2e4f0] font-mono">{selectedImage.width} x {selectedImage.height}</p>
+            <span className="text-[#64748B]">尺寸</span>
+            <p className="text-[#0F172A] font-mono">{selectedImage.width} x {selectedImage.height}</p>
           </div>
           <div>
-            <span className="text-[#555872]">划分</span>
+            <span className="text-[#64748B]">划分</span>
             <p className="flex items-center gap-1">
               <span
                 className="w-2 h-2 rounded-full"
                 style={{ backgroundColor: SPLIT_COLORS[selectedImage.split] }}
               />
-              <span className="text-[#e2e4f0]">{SPLIT_LABELS[selectedImage.split]}</span>
+              <span className="text-[#0F172A]">{SPLIT_LABELS[selectedImage.split]}</span>
             </p>
           </div>
           <div>
-            <span className="text-[#555872]">来源</span>
-            <p className="text-[#e2e4f0]">{selectedImage.metadata.source}</p>
+            <span className="text-[#64748B]">来源</span>
+            <p className="text-[#0F172A]">{selectedImage.metadata.source}</p>
           </div>
           <div>
-            <span className="text-[#555872]">日期</span>
-            <p className="text-[#e2e4f0] font-mono">{selectedImage.metadata.captureDate}</p>
+            <span className="text-[#64748B]">日期</span>
+            <p className="text-[#0F172A] font-mono">{selectedImage.metadata.captureDate}</p>
           </div>
           <div>
-            <span className="text-[#555872]">向量坐标</span>
-            <p className="text-[#e2e4f0] font-mono">
+            <span className="text-[#64748B]">向量坐标</span>
+            <p className="text-[#0F172A] font-mono">
               [{selectedImage.embedding2d[0].toFixed(2)}, {selectedImage.embedding2d[1].toFixed(2)}]
             </p>
           </div>
@@ -253,7 +253,7 @@ export function DetailPanel() {
           {selectedImage.metadata.tags.map((tag) => (
             <span
               key={tag}
-              className="text-[9px] px-1.5 py-0.5 rounded bg-[#161822] text-[#8b8ea8] border border-[#1e2030]"
+              className="text-[9px] px-1.5 py-0.5 rounded bg-[#F8FAFC] text-[#475569] border border-[#E2E8F0]"
             >
               {getTagLabel(tag)}
             </span>
@@ -262,19 +262,19 @@ export function DetailPanel() {
       </div>
 
       {/* Semantic Attributes */}
-      <div className="px-4 py-3 border-b border-[#1e2030]">
-        <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
+      <div className="px-4 py-3 border-b border-[#E2E8F0]">
+        <h4 className="text-xs font-semibold text-[#475569] uppercase tracking-wider mb-2">
           语义属性
         </h4>
         <div className="grid grid-cols-2 gap-1.5">
           {(Object.keys(selectedImage.metadata.semantics) as (keyof SemanticAttributes)[]).map((key) => {
             const value = selectedImage.metadata.semantics[key];
             return (
-              <div key={key} className="rounded bg-[#161822]/50 px-2 py-1.5">
-                <span className="block text-[9px] text-[#555872] uppercase tracking-wider">
+              <div key={key} className="rounded bg-[#F8FAFC]/50 px-2 py-1.5">
+                <span className="block text-[9px] text-[#64748B] uppercase tracking-wider">
                   {SEMANTIC_LABELS[key]}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[#e2e4f0]">
+                <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[#0F172A]">
                   <span
                     className="h-2 w-2 rounded-full"
                     style={{ backgroundColor: SEMANTIC_COLORS[key][value] }}
@@ -288,13 +288,13 @@ export function DetailPanel() {
       </div>
 
       {/* Detections Table */}
-      <div className="px-4 py-3 border-b border-[#1e2030]">
-        <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
+      <div className="px-4 py-3 border-b border-[#E2E8F0]">
+        <h4 className="text-xs font-semibold text-[#475569] uppercase tracking-wider mb-2">
           检测结果（{selectedImage.detections.length}）
         </h4>
         <div className="space-y-1">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_60px_60px_50px] gap-1 text-[9px] text-[#555872] uppercase px-2 py-1">
+          <div className="grid grid-cols-[1fr_60px_60px_50px] gap-1 text-[9px] text-[#64748B] uppercase px-2 py-1">
             <span>类别</span>
             <span className="text-right">置信度</span>
             <span className="text-right">BBox</span>
@@ -303,14 +303,14 @@ export function DetailPanel() {
           {selectedImage.detections.map((det) => (
             <div
               key={det.id}
-              className="grid grid-cols-[1fr_60px_60px_50px] gap-1 items-center text-[10px] px-2 py-1.5 rounded bg-[#161822]/50 hover:bg-[#161822] transition-colors"
+              className="grid grid-cols-[1fr_60px_60px_50px] gap-1 items-center text-[10px] px-2 py-1.5 rounded bg-[#F8FAFC]/50 hover:bg-[#F8FAFC] transition-colors"
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 <span
                   className="w-2 h-2 rounded-sm shrink-0"
                   style={{ backgroundColor: CATEGORY_COLORS[det.label] }}
                 />
-                <span className="text-[#e2e4f0] truncate">{det.label}</span>
+                <span className="text-[#0F172A] truncate">{det.label}</span>
               </div>
               <span
                 className="text-right font-mono"
@@ -318,7 +318,7 @@ export function DetailPanel() {
               >
                 {det.confidence < 1 ? `${(det.confidence * 100).toFixed(0)}%` : '—'}
               </span>
-              <span className="text-right text-[#555872] font-mono text-[9px]">
+              <span className="text-right text-[#64748B] font-mono text-[9px]">
                 {det.bbox[2].toFixed(2)}x{det.bbox[3].toFixed(2)}
               </span>
               <span className="text-right">
@@ -335,7 +335,7 @@ export function DetailPanel() {
 
       {/* Similar Images */}
       <div className="px-4 py-3">
-        <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-2">
+        <h4 className="text-xs font-semibold text-[#475569] uppercase tracking-wider mb-2">
           相似图片（向量距离）
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
@@ -343,7 +343,7 @@ export function DetailPanel() {
             <button
               key={image.id}
               onClick={() => selectImage(image.id)}
-              className="relative group rounded overflow-hidden bg-[#161822] aspect-square hover:ring-1 hover:ring-[#6366f1] transition-all"
+              className="relative group rounded overflow-hidden bg-[#F8FAFC] aspect-square hover:ring-1 hover:ring-[#2563EB] transition-all"
             >
               <img
                 src={getImageUrl(image.id, 100, 100)}
@@ -367,7 +367,7 @@ export function DetailPanel() {
                       width={w * image.width}
                       height={h * image.height}
                       fill="none"
-                      stroke={CATEGORY_COLORS[det.label] || '#6366f1'}
+                      stroke={CATEGORY_COLORS[det.label] || '#2563EB'}
                       strokeWidth="4"
                       opacity={0.7}
                     />
@@ -376,7 +376,7 @@ export function DetailPanel() {
               </svg>
               {/* Distance badge */}
               <div className="absolute bottom-0.5 right-0.5">
-                <span className="text-[8px] font-mono bg-black/70 text-[#8b8ea8] px-1 rounded">
+                <span className="text-[8px] font-mono bg-white/90 text-[#0F172A] px-1 rounded shadow-sm">
                   {distance.toFixed(1)}
                 </span>
               </div>
@@ -398,13 +398,13 @@ function OverviewSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="px-4 py-3 border-b border-[#1e2030]">
+    <div className="px-4 py-3 border-b border-[#E2E8F0]">
       <div className="mb-2 flex items-center gap-2">
-        <h4 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider">
+        <h4 className="text-xs font-semibold text-[#475569] uppercase tracking-wider">
           {title}
         </h4>
         {active && (
-          <span className="rounded bg-[#6366f1]/15 px-1.5 py-0.5 text-[9px] text-[#a5b4fc]">
+          <span className="rounded bg-[#2563EB]/15 px-1.5 py-0.5 text-[9px] text-[#1D4ED8]">
             当前着色
           </span>
         )}
@@ -529,14 +529,14 @@ function OverviewBar({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 truncate text-[10px] text-[#8b8ea8]">{label}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#161822]">
+      <span className="w-16 truncate text-[10px] text-[#475569]">{label}</span>
+      <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#F8FAFC]">
         <div
-          className="h-full rounded-full bg-[#6366f1]/70"
+          className="h-full rounded-full bg-[#2563EB]/70"
           style={{ width: `${barWidth}%` }}
         />
       </div>
-      <span className="w-8 text-right font-mono text-[10px] text-[#555872]">{count}</span>
+      <span className="w-8 text-right font-mono text-[10px] text-[#64748B]">{count}</span>
     </div>
   );
 }

@@ -99,16 +99,16 @@ export function ScatterView() {
     (img: DatasetImage): string => {
       switch (colorByMode) {
         case 'split':
-          return SPLIT_COLORS[img.split] || '#6366f1';
+          return SPLIT_COLORS[img.split] || '#2563EB';
         case 'lighting':
         case 'viewpoint':
         case 'blur':
         case 'weather':
         case 'timeOfDay':
         case 'environment':
-          return SEMANTIC_COLORS[colorByMode][img.metadata.semantics[colorByMode]] || '#6366f1';
+          return SEMANTIC_COLORS[colorByMode][img.metadata.semantics[colorByMode]] || '#2563EB';
         default:
-          return SEMANTIC_COLORS.timeOfDay[img.metadata.semantics.timeOfDay] || '#6366f1';
+          return SEMANTIC_COLORS.timeOfDay[img.metadata.semantics.timeOfDay] || '#2563EB';
       }
     },
     [colorByMode]
@@ -162,11 +162,14 @@ export function ScatterView() {
     const padding = 40;
 
     // Clear
-    ctx.fillStyle = '#0a0b10';
+    ctx.fillStyle = '#F3F7FC';
     ctx.fillRect(0, 0, w, h);
 
+    ctx.fillStyle = '#F8FBFF';
+    ctx.fillRect(padding, padding, w - 2 * padding, h - 2 * padding);
+
     // Draw grid
-    ctx.strokeStyle = '#1a1c2a';
+    ctx.strokeStyle = '#E6EEF8';
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= 10; i++) {
       const x = padding + ((w - 2 * padding) * i) / 10;
@@ -202,18 +205,21 @@ export function ScatterView() {
       ctx.fill();
 
       if (isSelected && scatterSelection.length > 0) {
-        ctx.strokeStyle = '#ffffff40';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.strokeStyle = '#2563EB';
+        ctx.lineWidth = 1;
         ctx.stroke();
       }
     }
 
     // Draw rectangle selection
     if (rectSelection) {
-      ctx.strokeStyle = '#6366f1';
+      ctx.strokeStyle = '#2563EB';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([5, 3]);
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.06)';
+      ctx.fillStyle = 'rgba(37, 99, 235, 0.06)';
       const rx = Math.min(rectSelection.startX, rectSelection.endX);
       const ry = Math.min(rectSelection.startY, rectSelection.endY);
       const rw = Math.abs(rectSelection.endX - rectSelection.startX);
@@ -235,10 +241,10 @@ export function ScatterView() {
       }
       if (polygonVertices.length >= 3) {
         ctx.closePath();
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
         ctx.fill();
       }
-      ctx.strokeStyle = '#6366f1';
+      ctx.strokeStyle = '#2563EB';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       ctx.stroke();
@@ -248,9 +254,9 @@ export function ScatterView() {
       for (const v of polygonVertices) {
         ctx.beginPath();
         ctx.arc(v.x, v.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#6366f1';
+        ctx.fillStyle = '#2563EB';
         ctx.fill();
-        ctx.strokeStyle = '#0a0b10';
+        ctx.strokeStyle = '#F6F8FB';
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -273,9 +279,9 @@ export function ScatterView() {
         ctx.lineTo(lassoPath[i].x, lassoPath[i].y);
       }
       ctx.closePath();
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.06)';
+      ctx.fillStyle = 'rgba(37, 99, 235, 0.06)';
       ctx.fill();
-      ctx.strokeStyle = '#6366f1';
+      ctx.strokeStyle = '#2563EB';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
       ctx.stroke();
@@ -283,7 +289,7 @@ export function ScatterView() {
     }
 
     // Axis labels
-    ctx.fillStyle = '#555872';
+    ctx.fillStyle = '#64748B';
     ctx.font = '10px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('UMAP-1', w / 2, h - 8);
@@ -554,11 +560,11 @@ export function ScatterView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Scatter controls */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e2030]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#E2E8F0]">
         <div className="flex items-center gap-3">
           {/* Color mode */}
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-[#555872] uppercase tracking-wider">着色</span>
+            <span className="text-[10px] text-[#64748B] uppercase tracking-wider">着色</span>
             {colorModes.map((cm) => (
               <button
                 key={cm.mode}
@@ -566,8 +572,8 @@ export function ScatterView() {
                 className={cn(
                   'text-[11px] px-2 py-1 rounded transition-colors',
                   colorByMode === cm.mode
-                    ? 'bg-[#6366f1] text-white'
-                    : 'text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#161822]'
+                    ? 'bg-[#2563EB] text-white'
+                    : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
                 )}
               >
                 {cm.label}
@@ -575,11 +581,11 @@ export function ScatterView() {
             ))}
           </div>
 
-          <div className="w-px h-4 bg-[#1e2030]" />
+          <div className="w-px h-4 bg-[#E2E8F0]" />
 
           {/* Selection tools */}
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-[#555872] uppercase tracking-wider mr-1">选择</span>
+            <span className="text-[10px] text-[#64748B] uppercase tracking-wider mr-1">选择</span>
             {tools.map((t) => (
               <button
                 key={t.tool}
@@ -598,8 +604,8 @@ export function ScatterView() {
                 className={cn(
                   'text-[11px] px-2 py-1 rounded transition-colors flex items-center gap-1',
                   activeTool === t.tool
-                    ? 'bg-[#1e2030] text-[#e2e4f0] ring-1 ring-[#6366f1]/50'
-                    : 'text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#161822]'
+                    ? 'bg-[#E2E8F0] text-[#0F172A] ring-1 ring-[#2563EB]/50'
+                    : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
                 )}
               >
                 <span className="text-xs">{t.icon}</span>
@@ -612,7 +618,7 @@ export function ScatterView() {
         <div className="flex items-center gap-3">
           {scatterSelection.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-[#6366f1] font-medium">
+              <span className="text-[11px] text-[#2563EB] font-medium">
                 已选 {scatterSelection.length} 张
               </span>
               <button
@@ -620,7 +626,7 @@ export function ScatterView() {
                   setScatterSelection([]);
                   setShowSelectedPanel(false);
                 }}
-                className="text-[10px] px-2 py-0.5 rounded bg-[#1e2030] text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#2a2d42] transition-colors"
+                className="text-[10px] px-2 py-0.5 rounded bg-[#E2E8F0] text-[#475569] hover:text-[#0F172A] hover:bg-[#CBD5E1] transition-colors"
               >
                 清除
               </button>
@@ -629,15 +635,15 @@ export function ScatterView() {
                 className={cn(
                   'text-[10px] px-2 py-0.5 rounded transition-colors',
                   showSelectedPanel
-                    ? 'bg-[#6366f1] text-white'
-                    : 'bg-[#1e2030] text-[#8b8ea8] hover:text-[#e2e4f0] hover:bg-[#2a2d42]'
+                    ? 'bg-[#2563EB] text-white'
+                    : 'bg-[#E2E8F0] text-[#475569] hover:text-[#0F172A] hover:bg-[#CBD5E1]'
                 )}
               >
                 {showSelectedPanel ? '收起' : '展开'}列表
               </button>
             </div>
           )}
-          <span className="text-[10px] text-[#555872]">
+          <span className="text-[10px] text-[#64748B]">
             {activeTool === 'polygon'
               ? '点击添加顶点 | 双击/Enter 完成 | Esc 取消'
               : activeTool === 'lasso'
@@ -667,13 +673,13 @@ export function ScatterView() {
           />
 
           {/* Color legend */}
-          <div className="absolute top-3 right-3 z-10 max-w-[360px] rounded-md border border-[#1e2030] bg-[#0f1117]/90 px-2.5 py-2 shadow-lg backdrop-blur-sm">
+          <div className="absolute top-3 right-3 z-10 max-w-[360px] rounded-md border border-[#D8E4F2] bg-white/85 px-2.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
             <button
               type="button"
               onClick={() => setShowLegend((value) => !value)}
               className="flex w-full items-center gap-2 text-left"
             >
-              <span className="shrink-0 text-[10px] font-medium text-[#8b8ea8]">
+              <span className="shrink-0 text-[10px] font-medium text-[#475569]">
                 着色：{activeColorLabel}
               </span>
               <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -683,33 +689,33 @@ export function ScatterView() {
                       className="h-2 w-2 shrink-0 rounded-full"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="truncate text-[#8b8ea8]">{item.label}</span>
+                    <span className="truncate text-[#475569]">{item.label}</span>
                     {item.count !== null && (
-                      <span className="font-mono text-[#555872]">{item.count}</span>
+                      <span className="font-mono text-[#64748B]">{item.count}</span>
                     )}
                   </span>
                 ))}
                 {remainingLegendCount > 0 && (
-                  <span className="shrink-0 text-[10px] text-[#555872]">
+                  <span className="shrink-0 text-[10px] text-[#64748B]">
                     +{remainingLegendCount}
                   </span>
                 )}
               </span>
-              <span className="shrink-0 text-[10px] text-[#555872]">
+              <span className="shrink-0 text-[10px] text-[#64748B]">
                 {showLegend ? '收起' : '展开'}
               </span>
             </button>
             {showLegend && (
-              <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto border-t border-[#1e2030] pt-2">
+              <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto border-t border-[#E2E8F0] pt-2">
                 {legendItems.map((item) => (
                   <div key={item.label} className="flex items-center gap-1.5 text-[10px]">
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="min-w-0 flex-1 truncate text-[#8b8ea8]">{item.label}</span>
+                    <span className="min-w-0 flex-1 truncate text-[#475569]">{item.label}</span>
                     {item.count !== null && (
-                      <span className="font-mono text-[#555872]">{item.count}</span>
+                      <span className="font-mono text-[#64748B]">{item.count}</span>
                     )}
                   </div>
                 ))}
@@ -723,24 +729,24 @@ export function ScatterView() {
               className="fixed z-50 pointer-events-none"
               style={{ left: tooltipPos.x + 12, top: tooltipPos.y - 10 }}
             >
-              <div className="bg-[#161822] border border-[#2a2d42] rounded-lg p-2 shadow-xl min-w-[160px]">
+              <div className="bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg p-2 shadow-xl min-w-[160px]">
                 <div className="flex items-center gap-2 mb-1">
                   <div
                     className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: getPointColor(hoveredPoint.image) }}
                   />
-                  <span className="text-xs text-[#e2e4f0] font-mono">
+                  <span className="text-xs text-[#0F172A] font-mono">
                     {hoveredPoint.image.filename}
                   </span>
                 </div>
-                <div className="text-[10px] text-[#8b8ea8] space-y-0.5">
+                <div className="text-[10px] text-[#475569] space-y-0.5">
                   <div>类别: {hoveredPoint.image.detections.map((d) => d.label).join(', ')}</div>
                   <div>
-                    划分: <span className="text-[#e2e4f0]">{SPLIT_LABELS[hoveredPoint.image.split]}</span>
+                    划分: <span className="text-[#0F172A]">{SPLIT_LABELS[hoveredPoint.image.split]}</span>
                   </div>
                   <div>
                     语义:{' '}
-                    <span className="text-[#e2e4f0]">
+                    <span className="text-[#0F172A]">
                       {SEMANTIC_VALUE_LABELS.timeOfDay[hoveredPoint.image.metadata.semantics.timeOfDay]},{' '}
                       {SEMANTIC_VALUE_LABELS.environment[hoveredPoint.image.metadata.semantics.environment]},{' '}
                       {SEMANTIC_VALUE_LABELS.blur[hoveredPoint.image.metadata.semantics.blur]}
@@ -758,31 +764,31 @@ export function ScatterView() {
 
         {/* Selected Images Panel */}
         {showSelectedPanel && scatterSelection.length > 0 && (
-          <div className="h-[200px] border-t border-[#1e2030] bg-[#0f1117] flex flex-col shrink-0">
+          <div className="h-[200px] border-t border-[#E2E8F0] bg-[#FFFFFF] flex flex-col shrink-0">
             {/* Panel header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e2030] shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#E2E8F0] shrink-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-[#e2e4f0]">已选图片</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#6366f1]/20 text-[#6366f1] font-mono">
+                <span className="text-xs font-medium text-[#0F172A]">已选图片</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2563EB]/20 text-[#2563EB] font-mono">
                   {selectedImages.length}
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-[10px] text-[#555872]">
+              <div className="flex items-center gap-3 text-[10px] text-[#64748B]">
                 <span>
                   类别:{' '}
-                  <span className="text-[#8b8ea8]">
+                  <span className="text-[#475569]">
                     {new Set(selectedImages.flatMap((i) => i.detections.map((d) => d.label))).size}
                   </span>
                 </span>
                 <span>
                   标注:{' '}
-                  <span className="text-[#8b8ea8]">
+                  <span className="text-[#475569]">
                     {selectedImages.reduce((s, i) => s + i.detections.length, 0)}
                   </span>
                 </span>
                 <button
                   onClick={() => setShowSelectedPanel(false)}
-                  className="text-[#555872] hover:text-[#e2e4f0] transition-colors"
+                  className="text-[#64748B] hover:text-[#0F172A] transition-colors"
                 >
                   <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
                     <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -818,8 +824,8 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
       className={cn(
         'relative group flex-shrink-0 h-full rounded-lg overflow-hidden border transition-all duration-150',
         isSelected
-          ? 'border-[#6366f1] ring-1 ring-[#6366f1]/30'
-          : 'border-[#1e2030] hover:border-[#2a2d42]'
+          ? 'border-[#2563EB] ring-1 ring-[#2563EB]/30'
+          : 'border-[#E2E8F0] hover:border-[#CBD5E1]'
       )}
       style={{ aspectRatio }}
     >
@@ -839,7 +845,7 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
       >
         {image.detections.map((det) => {
           const [x, y, w, h] = det.bbox;
-          const color = CATEGORY_COLORS[det.label] || '#6366f1';
+          const color = CATEGORY_COLORS[det.label] || '#2563EB';
           return (
             <rect
               key={det.id}
@@ -857,8 +863,8 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
       </svg>
 
       {/* Info overlay */}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
-        <p className="text-[9px] text-[#e2e4f0] font-mono truncate">{image.filename}</p>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white/95 via-white/75 to-transparent p-2 pt-6 backdrop-blur-[1px]">
+        <p className="text-[9px] text-[#0F172A] font-mono truncate">{image.filename}</p>
         <div className="flex items-center gap-1 mt-0.5">
           {image.detections.slice(0, 3).map((det) => (
             <span
@@ -879,12 +885,12 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
       <div className="absolute top-1 right-1">
         <span
           className={cn(
-            'text-[8px] font-medium px-1 py-0.5 rounded bg-black/60 backdrop-blur-sm',
+            'text-[8px] font-medium px-1 py-0.5 rounded border bg-white/90 text-[#0F172A] shadow-sm backdrop-blur-sm',
             image.split === 'train'
-              ? 'text-blue-400'
+              ? 'border-blue-200'
               : image.split === 'validation'
-              ? 'text-amber-400'
-              : 'text-emerald-400'
+              ? 'border-amber-200'
+              : 'border-emerald-200'
           )}
         >
           {SPLIT_SHORT_LABELS[image.split]}

@@ -19,7 +19,7 @@ function BBoxOverlay({ detections, width, height }: {
     >
       {detections.map((det) => {
         const [x, y, w, h] = det.bbox;
-        const color = CATEGORY_COLORS[det.label] || '#6366f1';
+        const color = CATEGORY_COLORS[det.label] || '#2563EB';
         const px = x * width;
         const py = y * height;
         const pw = w * width;
@@ -84,20 +84,20 @@ function ImageCard({ image }: { image: DatasetImage }) {
       className={cn(
         'relative group cursor-pointer rounded-lg overflow-hidden border transition-all duration-150',
         isSelected
-          ? 'border-[#6366f1] ring-1 ring-[#6366f1]/30 shadow-[0_0_12px_rgba(99,102,241,0.15)]'
-          : 'border-[#1e2030] hover:border-[#2a2d42] hover:shadow-lg'
+          ? 'border-[#2563EB] ring-1 ring-[#2563EB]/30 shadow-[0_0_12px_rgba(37,99,235,0.15)]'
+          : 'border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-lg'
       )}
     >
       {/* Image container with fixed aspect ratio */}
       <div
-        className="relative bg-[#161822] overflow-hidden"
+        className="relative bg-[#F8FAFC] overflow-hidden"
         style={{ aspectRatio: aspectRatio }}
       >
         {/* Placeholder with gradient based on primary category */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(135deg, ${CATEGORY_COLORS[image.detections[0]?.label] || '#6366f1'}15, ${CATEGORY_COLORS[image.detections[0]?.label] || '#6366f1'}05)`,
+            background: `linear-gradient(135deg, ${CATEGORY_COLORS[image.detections[0]?.label] || '#2563EB'}15, ${CATEGORY_COLORS[image.detections[0]?.label] || '#2563EB'}05)`,
           }}
         />
         
@@ -117,15 +117,15 @@ function ImageCard({ image }: { image: DatasetImage }) {
         />
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+        <div className="absolute inset-0 bg-[#0F172A]/0 group-hover:bg-[#0F172A]/10 transition-colors" />
 
         {/* Split badge */}
         <div className="absolute top-1.5 right-1.5">
           <span
             className={cn(
-              'text-[9px] font-medium px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm',
-              image.split === 'train' ? 'text-blue-400' :
-              image.split === 'validation' ? 'text-amber-400' : 'text-emerald-400'
+              'text-[9px] font-medium px-1.5 py-0.5 rounded border bg-white/90 text-[#0F172A] shadow-sm backdrop-blur-sm',
+              image.split === 'train' ? 'border-blue-200' :
+              image.split === 'validation' ? 'border-amber-200' : 'border-emerald-200'
             )}
           >
             {SPLIT_SHORT_LABELS[image.split]}
@@ -134,7 +134,7 @@ function ImageCard({ image }: { image: DatasetImage }) {
 
         {/* Detection count */}
         <div className="absolute bottom-1.5 left-1.5">
-          <span className="text-[9px] font-mono text-[#8b8ea8] bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded">
+          <span className="text-[9px] font-mono text-[#0F172A] bg-white/90 backdrop-blur-sm px-1.5 py-0.5 rounded shadow-sm">
             {image.detections.length} 个标注
           </span>
         </div>
@@ -149,14 +149,14 @@ function ImageCard({ image }: { image: DatasetImage }) {
           {image.detections.slice(0, 3).map((det) => (
             <span
               key={det.id}
-              className="rounded bg-black/65 px-1 py-0 text-[9px] backdrop-blur-sm"
+              className="rounded bg-white/90 px-1 py-0 text-[9px] shadow-sm backdrop-blur-sm"
               style={{ color: CATEGORY_COLORS[det.label] }}
             >
               {det.label}
             </span>
           ))}
           {image.detections.length > 3 && (
-            <span className="rounded bg-black/65 px-1 py-0 text-[9px] text-[#8b8ea8] backdrop-blur-sm">
+            <span className="rounded bg-white/90 px-1 py-0 text-[9px] text-[#475569] shadow-sm backdrop-blur-sm">
               +{image.detections.length - 3}
             </span>
           )}
@@ -164,8 +164,8 @@ function ImageCard({ image }: { image: DatasetImage }) {
       </div>
 
       {/* Card footer */}
-      <div className="px-2 py-1.5 bg-[#0f1117]">
-        <p className="text-[10px] text-[#8b8ea8] truncate font-mono">
+      <div className="px-2 py-1.5 bg-[#FFFFFF]">
+        <p className="text-[10px] text-[#475569] truncate font-mono">
           {image.filename}
         </p>
       </div>
@@ -180,21 +180,21 @@ export function GridView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Grid controls */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#1e2030]">
-        <span className="text-xs text-[#8b8ea8]">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[#E2E8F0]">
+        <span className="text-xs text-[#475569]">
           共 {filteredImages.length} 张图片
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[#555872]">密度</span>
+          <span className="text-[10px] text-[#64748B]">密度</span>
           <input
             type="range"
             min="2"
             max="8"
             value={gridColumns}
             onChange={(e) => setGridColumns(parseInt(e.target.value))}
-            className="w-20 accent-[#6366f1] h-1"
+            className="w-20 accent-[#2563EB] h-1"
           />
-          <span className="text-[10px] text-[#555872] font-mono w-3">{gridColumns}</span>
+          <span className="text-[10px] text-[#64748B] font-mono w-3">{gridColumns}</span>
         </div>
       </div>
 
@@ -204,7 +204,7 @@ export function GridView() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-3xl mb-2 opacity-30">⊘</div>
-              <p className="text-sm text-[#555872]">没有符合当前筛选条件的图片</p>
+              <p className="text-sm text-[#64748B]">没有符合当前筛选条件的图片</p>
             </div>
           </div>
         ) : (

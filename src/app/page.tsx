@@ -11,7 +11,7 @@ export default function HomePage() {
   const viewMode = useGalleryStore((s) => s.viewMode);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#08090d] text-[#e2e4f0] overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-[#F6F8FB] text-[#0F172A] overflow-hidden">
       {/* Top Bar */}
       <TopBar />
 
@@ -21,7 +21,7 @@ export default function HomePage() {
         <Sidebar />
 
         {/* Center - Main View */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-[#0a0b10]">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#F6F8FB]">
           {viewMode === 'grid' ? <GridView /> : <ScatterView />}
         </main>
 
@@ -42,26 +42,26 @@ function StatusBar() {
   const categories = new Set(filtered.flatMap((img) => img.detections.map((d) => d.label)));
 
   return (
-    <footer className="h-[32px] border-t border-[#1e2030] bg-[#0f1117] flex items-center px-4 gap-6 shrink-0">
-      <span className="text-[10px] text-[#555872]">
-        当前视图: <span className="text-[#8b8ea8]">{viewMode === 'grid' ? '图库' : '向量分布'}</span>
+    <footer className="h-[32px] border-t border-[#E2E8F0] bg-[#FFFFFF] flex items-center px-4 gap-6 shrink-0">
+      <span className="text-[10px] text-[#64748B]">
+        当前视图: <span className="text-[#475569]">{viewMode === 'grid' ? '图库' : '向量分布'}</span>
       </span>
-      <span className="text-[10px] text-[#555872]">
-        图片: <span className="text-[#8b8ea8]">{filtered.length}</span>
+      <span className="text-[10px] text-[#64748B]">
+        图片: <span className="text-[#475569]">{filtered.length}</span>
       </span>
-      <span className="text-[10px] text-[#555872]">
-        标注: <span className="text-[#8b8ea8]">{totalAnnotations}</span>
+      <span className="text-[10px] text-[#64748B]">
+        标注: <span className="text-[#475569]">{totalAnnotations}</span>
       </span>
-      <span className="text-[10px] text-[#555872]">
-        类别: <span className="text-[#8b8ea8]">{categories.size}</span>
+      <span className="text-[10px] text-[#64748B]">
+        类别: <span className="text-[#475569]">{categories.size}</span>
       </span>
       {scatterSelection.length > 0 && (
-        <span className="text-[10px] text-[#6366f1]">
+        <span className="text-[10px] text-[#2563EB]">
           已选: <span className="font-medium">{scatterSelection.length}</span>
         </span>
       )}
       <div className="flex-1" />
-      <span className="text-[10px] text-[#555872]">
+      <span className="text-[10px] text-[#64748B]">
         数据集分析台 v1.0
       </span>
     </footer>

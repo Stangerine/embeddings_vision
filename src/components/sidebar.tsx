@@ -55,9 +55,9 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-[260px] border-r border-[#1e2030] bg-[#0f1117] overflow-y-auto shrink-0 flex flex-col">
+    <aside className="w-[260px] border-r border-[#E2E8F0] bg-[#FFFFFF] overflow-y-auto shrink-0 flex flex-col">
       {/* Dataset Splits */}
-      <div className="p-4 border-b border-[#1e2030]">
+      <div className="p-4 border-b border-[#E2E8F0]">
         <FilterHeader
           title="数据划分"
           selected={filters.selectedSplits.length}
@@ -73,7 +73,7 @@ export function Sidebar() {
                 key={split}
                 className={cn(
                   'flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors',
-                  checked ? 'bg-[#161822]' : 'hover:bg-[#161822]/50'
+                  checked ? 'bg-[#F8FAFC]' : 'hover:bg-[#F8FAFC]/50'
                 )}
               >
                 <input
@@ -85,7 +85,7 @@ export function Sidebar() {
                 <span
                   className={cn(
                     'w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all',
-                    checked ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
+                    checked ? 'border-[#2563EB] bg-[#2563EB]' : 'border-[#CBD5E1]'
                   )}
                 >
                   {checked && (
@@ -94,10 +94,10 @@ export function Sidebar() {
                     </svg>
                   )}
                 </span>
-                <span className={cn('text-xs flex-1', checked ? 'text-[#e2e4f0]' : 'text-[#555872]')}>
+                <span className={cn('text-xs flex-1', checked ? 'text-[#0F172A]' : 'text-[#64748B]')}>
                   {SPLIT_LABELS[split]}
                 </span>
-                <span className="text-[10px] text-[#555872] font-mono">{splitCounts[split] || 0}</span>
+                <span className="text-[10px] text-[#64748B] font-mono">{splitCounts[split] || 0}</span>
               </label>
             );
           })}
@@ -105,7 +105,7 @@ export function Sidebar() {
       </div>
 
       {/* Categories */}
-      <div className="p-4 border-b border-[#1e2030]">
+      <div className="p-4 border-b border-[#E2E8F0]">
         <FilterHeader
           title="目标类别"
           selected={filters.selectedCategories.length}
@@ -122,7 +122,7 @@ export function Sidebar() {
                 key={cat}
                 className={cn(
                   'flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors',
-                  checked ? 'bg-[#161822]' : 'hover:bg-[#161822]/50'
+                  checked ? 'bg-[#F8FAFC]' : 'hover:bg-[#F8FAFC]/50'
                 )}
               >
                 <input
@@ -134,7 +134,7 @@ export function Sidebar() {
                 <span
                   className={cn(
                     'w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center transition-all',
-                    checked ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
+                    checked ? 'border-[#2563EB] bg-[#2563EB]' : 'border-[#CBD5E1]'
                   )}
                 >
                   {checked && (
@@ -145,11 +145,11 @@ export function Sidebar() {
                 </span>
                 <span className={cn(
                   'text-xs flex-1',
-                  checked ? 'text-[#e2e4f0]' : 'text-[#555872]'
+                  checked ? 'text-[#0F172A]' : 'text-[#64748B]'
                 )}>
                   {cat}
                 </span>
-                <span className="text-[10px] text-[#555872] font-mono">{count}</span>
+                <span className="text-[10px] text-[#64748B] font-mono">{count}</span>
               </label>
             );
           })}
@@ -157,8 +157,8 @@ export function Sidebar() {
       </div>
 
       {/* Semantic Attributes */}
-      <div className="p-4 border-b border-[#1e2030]">
-        <h3 className="text-xs font-semibold text-[#8b8ea8] uppercase tracking-wider mb-3">
+      <div className="p-4 border-b border-[#E2E8F0]">
+        <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-wider mb-3">
           语义属性
         </h3>
         <div className="space-y-4">
@@ -182,26 +182,26 @@ export function Sidebar() {
                       type="button"
                       onClick={() => toggleSemanticFilter(key, value)}
                       className={cn(
-                        'flex items-center gap-1 rounded px-1.5 py-1 text-[10px] transition-colors',
+                        'flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] transition-colors',
                         active
-                          ? 'bg-[#1e2030] text-[#e2e4f0] ring-1 ring-[#2a2d42]'
-                          : 'bg-[#161822]/60 text-[#8b8ea8] hover:bg-[#161822] hover:text-[#e2e4f0]'
+                          ? 'border-[#BFDBFE] bg-[#EFF6FF] text-[#1E3A8A]'
+                          : 'border-transparent bg-[#F8FAFC]/70 text-[#64748B] hover:border-[#E2E8F0] hover:bg-[#FFFFFF] hover:text-[#0F172A]'
                       )}
                     >
                       <span
                         className={cn(
-                          'flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border',
-                          active ? 'border-[#6366f1] bg-[#6366f1]' : 'border-[#2a2d42]'
+                          'flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border transition-colors',
+                          active ? 'border-[#60A5FA] bg-[#DBEAFE]' : 'border-[#CBD5E1] bg-white'
                         )}
                       >
                         {active && (
-                          <svg className="h-2 w-2 text-white" viewBox="0 0 12 12" fill="none">
+                          <svg className="h-2 w-2 text-[#2563EB]" viewBox="0 0 12 12" fill="none">
                             <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
                       </span>
                       <span>{SEMANTIC_VALUE_LABELS[key][value]}</span>
-                      <span className="text-[#555872] font-mono">{count}</span>
+                      <span className={cn('font-mono', active ? 'text-[#3B82F6]' : 'text-[#94A3B8]')}>{count}</span>
                     </button>
                   );
                 })}
@@ -237,7 +237,7 @@ function FilterHeader({
       <div className="flex items-center gap-1.5">
         <h3
           className={cn(
-            'font-semibold text-[#8b8ea8] uppercase tracking-wider',
+            'font-semibold text-[#475569] uppercase tracking-wider',
             compact ? 'text-[10px]' : 'text-xs'
           )}
         >
@@ -246,7 +246,7 @@ function FilterHeader({
         <span
           className={cn(
             'rounded px-1 py-0.5 font-mono text-[9px]',
-            allSelected ? 'text-[#555872]' : 'bg-[#1e2030] text-[#e2e4f0]'
+            allSelected ? 'text-[#64748B]' : 'bg-[#E2E8F0] text-[#0F172A]'
           )}
         >
           {selected}/{total}
@@ -257,16 +257,16 @@ function FilterHeader({
           type="button"
           onClick={onSelectAll}
           disabled={allSelected}
-          className="text-[9px] text-[#555872] transition-colors hover:text-[#e2e4f0] disabled:cursor-default disabled:opacity-35"
+          className="text-[9px] text-[#64748B] transition-colors hover:text-[#0F172A] disabled:cursor-default disabled:opacity-35"
         >
           全选
         </button>
-        <span className="text-[9px] text-[#2a2d42]">/</span>
+        <span className="text-[9px] text-[#CBD5E1]">/</span>
         <button
           type="button"
           onClick={onClear}
           disabled={noneSelected}
-          className="text-[9px] text-[#555872] transition-colors hover:text-[#e2e4f0] disabled:cursor-default disabled:opacity-35"
+          className="text-[9px] text-[#64748B] transition-colors hover:text-[#0F172A] disabled:cursor-default disabled:opacity-35"
         >
           清空
         </button>
