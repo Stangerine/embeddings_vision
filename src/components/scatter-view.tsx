@@ -14,6 +14,7 @@ import {
 } from '@/lib/mock-data';
 import type { DatasetImage } from '@/lib/types';
 import type { ColorByMode } from '@/lib/types';
+import { useCleaningIssues } from '@/hooks/use-cleaning-issues';
 import { cn } from '@/lib/utils';
 
 type SelectionTool = 'rect' | 'polygon' | 'lasso';
@@ -36,6 +37,9 @@ interface LegendItem {
   color: string;
   count: number | null;
 }
+
+// Reusable empty set to avoid re-allocation on each render.
+const EMPTY_SET: Set<string> = new Set();
 
 // Point-in-polygon test (ray casting)
 function pointInPolygon(px: number, py: number, polygon: ScreenPoint[]): boolean {
@@ -76,6 +80,9 @@ export function ScatterView() {
   const [showSelectedPanel, setShowSelectedPanel] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
 
+  // Cleaning analysis overlay
+  const [showCleaning, setShowCleaning] = useState(false);
+
   const {
     getFilteredImages,
     colorByMode,
@@ -87,6 +94,15 @@ export function ScatterView() {
   } = useGalleryStore();
 
   const images = getFilteredImages();
+
+  // Cleaning analysis overlay (depends on filtered images)
+  const cleaning = useCleaningIssues(images, undefined, showCleaning);
+  const outlierIds = cleaning
+    ? new Set(cleaning.outliers.map((o) => o.imageId))
+    : EMPTY_SET;
+  const duplicateIdSet = cleaning
+    ? new Set(cleaning.duplicates.flatMap((d) => [d.imageIdA, d.imageIdB]))
+    : EMPTY_SET;
 
   // Compute bounds
   const allEmbeddings = images.map((img) => img.embedding2d);
@@ -288,6 +304,80 @@ export function ScatterView() {
       ctx.setLineDash([]);
     }
 
+    // Cleaning overlay: duplicate capsule bonds first, then outlier rings on top
+    if (cleaning) {
+      const screenById = new Map<string, { x: number; y: number }>();
+      for (const p of points) screenById.set(p.image.id, { x: p.screenX, y: p.screenY });
+
+      // Duplicate pairs — capsule bond: wide translucent body + crisp core + endpoint rings
+      if (cleaning.duplicates.length > 0) {
+        const pairSegments = cleaning.duplicates
+          .map((pair) => {
+            const a = screenById.get(pair.imageIdA);
+            const b = screenById.get(pair.imageIdB);
+            if (!a || !b) return null;
+            return { a, b };
+          })
+          .filter((s): s is { a: { x: number; y: number }; b: { x: number; y: number } } => s !== null);
+
+        // Outer translucent body (gives the "capsule" feel)
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.18)';
+        ctx.lineWidth = 9;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (const { a, b } of pairSegments) {
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        }
+        ctx.stroke();
+
+        // Crisp center line
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (const { a, b } of pairSegments) {
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+        }
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+
+        // Endpoint rings — visually binds each point to its pair
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.95)';
+        ctx.lineWidth = 1.5;
+        const drawnEndpoints = new Set<string>();
+        for (const pair of cleaning.duplicates) {
+          for (const id of [pair.imageIdA, pair.imageIdB]) {
+            if (drawnEndpoints.has(id)) continue;
+            drawnEndpoints.add(id);
+            const s = screenById.get(id);
+            if (!s) continue;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, 8, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Outlier rings — red halo (drawn on top, takes precedence)
+      if (cleaning.outliers.length > 0) {
+        for (const issue of cleaning.outliers) {
+          const s = screenById.get(issue.imageId);
+          if (!s) continue;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 11, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 11, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(239, 68, 68, 0.95)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
+    }
+
     // Axis labels
     ctx.fillStyle = '#64748B';
     ctx.font = '10px monospace';
@@ -301,7 +391,7 @@ export function ScatterView() {
 
     // Store points for hover detection
     (canvas as unknown as Record<string, DataPoint[]>).__points = points;
-  }, [images, colorByMode, scatterSelection, rectSelection, polygonVertices, polygonCursor, lassoPath, xMin, xMax, yMin, yMax, getPointColor]);
+  }, [images, colorByMode, scatterSelection, rectSelection, polygonVertices, polygonCursor, lassoPath, xMin, xMax, yMin, yMax, getPointColor, cleaning]);
 
   // Get mouse position relative to canvas
   const getCanvasPos = useCallback((e: React.MouseEvent): ScreenPoint => {
@@ -613,6 +703,42 @@ export function ScatterView() {
               </button>
             ))}
           </div>
+
+          <div className="w-px h-4 bg-[#E2E8F0]" />
+
+          {/* Cleaning analysis toggle */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-[#64748B] uppercase tracking-wider mr-1">清洗</span>
+            <button
+              onClick={() => setShowCleaning((v) => !v)}
+              title="基于 2D embedding 检测离群点和近似重复样本"
+              className={cn(
+                'text-[11px] px-2 py-1 rounded transition-colors flex items-center gap-1',
+                showCleaning
+                  ? 'bg-[#EF4444]/10 text-[#EF4444] ring-1 ring-[#EF4444]/40'
+                  : 'text-[#475569] hover:text-[#0F172A] hover:bg-[#F8FAFC]'
+              )}
+            >
+              <span className="text-xs">⊕</span>
+              清洗建议
+            </button>
+            {showCleaning && cleaning && (
+              <div className="flex items-center gap-2 ml-1 text-[10px]">
+                <span
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#EF4444]/10 text-[#EF4444]"
+                  title="k-NN 距离异常"
+                >
+                  离群 {cleaning.outliers.length}
+                </span>
+                <span
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#2563EB]/10 text-[#2563EB]"
+                  title="成对距离过近"
+                >
+                  重复对 {cleaning.duplicates.length}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -756,7 +882,61 @@ export function ScatterView() {
                     向量: [{hoveredPoint.image.embedding2d[0].toFixed(2)},{' '}
                     {hoveredPoint.image.embedding2d[1].toFixed(2)}]
                   </div>
+                  {showCleaning && (
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-[#E2E8F0] mt-1">
+                      {outlierIds.has(hoveredPoint.image.id) && (
+                        <span className="px-1 py-0 rounded bg-[#EF4444]/15 text-[#EF4444]">
+                          疑似离群点
+                        </span>
+                      )}
+                      {duplicateIdSet.has(hoveredPoint.image.id) && (
+                        <span className="px-1 py-0 rounded bg-[#2563EB]/15 text-[#2563EB]">
+                          疑似重复样本
+                        </span>
+                      )}
+                      {!outlierIds.has(hoveredPoint.image.id) &&
+                        !duplicateIdSet.has(hoveredPoint.image.id) && (
+                          <span className="text-[#64748B]">无清洗建议</span>
+                        )}
+                    </div>
+                  )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cleaning legend */}
+          {showCleaning && cleaning && (
+            <div className="absolute bottom-3 right-3 z-10 rounded-md border border-[#D8E4F2] bg-white/85 px-2.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md">
+              <div className="text-[10px] font-medium text-[#475569] mb-1.5">
+                清洗建议
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="relative inline-flex h-3 w-3 items-center justify-center">
+                    <span className="absolute inline-flex h-3 w-3 rounded-full border-[3px] border-[#EF4444]/25" />
+                    <span className="absolute inline-flex h-3 w-3 rounded-full border border-[#EF4444]" />
+                  </span>
+                  <span className="text-[#475569]">离群点</span>
+                  <span className="ml-auto font-mono text-[#64748B]">
+                    {cleaning.outliers.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="relative inline-flex h-3 w-5 items-center justify-center">
+                    <span className="absolute inline-flex h-[7px] w-5 rounded-full bg-[#2563EB]/20" />
+                    <span className="absolute inline-flex h-[1.5px] w-5 bg-[#2563EB]/85" />
+                    <span className="absolute left-0 inline-flex h-3 w-3 rounded-full border border-[#2563EB]" />
+                    <span className="absolute right-0 inline-flex h-3 w-3 rounded-full border border-[#2563EB]" />
+                  </span>
+                  <span className="text-[#475569]">重复对</span>
+                  <span className="ml-auto font-mono text-[#64748B]">
+                    {cleaning.duplicates.length}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-1.5 pt-1.5 border-t border-[#E2E8F0] text-[9px] text-[#64748B] leading-relaxed">
+                基于 2D embedding 启发式
               </div>
             </div>
           )}
