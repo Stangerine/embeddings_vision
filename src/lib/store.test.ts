@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { useGalleryStore } from './store';
+import type { DatasetPayload } from './types';
+
+const payload: DatasetPayload = {
+  info: {
+    id: 'unit-dataset',
+    name: 'Unit Dataset',
+    description: 'unit',
+    imageCount: 2,
+    annotationCount: 2,
+    categories: ['diaoche', 'wajueji'],
+    splits: { train: 1, validation: 1, test: 0 },
+  },
+  categories: ['diaoche', 'wajueji'],
+  categoryCounts: { diaoche: 1, wajueji: 1 },
+  embedding: {
+    model: 'bge-vl-large',
+    modelPath: '/home/shao/zzq/model/BGE-VL-large',
+    status: 'ready',
+    method: 'test',
+    dimensions: 2,
+    generatedAt: '2026-06-17T00:00:00Z',
+    message: 'test',
+  },
+  images: [
+    {
+      id: 'train-a',
+      filepath: '/api/dataset/image?id=unit-dataset&path=train/images/a.jpg',
+      filename: 'a.jpg',
+      width: 100,
+      height: 100,
+      split: 'train',
+      embedding2d: [0, 0],
+      detections: [
+        { id: 'a-0', label: 'diaoche', confidence: 1, bbox: [0, 0, 0.5, 0.5], isGroundTruth: true },
+      ],
+      metadata: {
+        source: 'unit',
+        captureDate: '2026-06-17',
+        tags: ['bright'],
+        semantics: {
+          lighting: 'bright',
+          viewpoint: 'front',
+          blur: 'sharp',
+          weather: 'clear',
+          timeOfDay: 'day',
+          environment: 'road',
+        },
+      },
+    },
+    {
+      id: 'validation-b',
+      filepath: '/api/dataset/image?id=unit-dataset&path=val/images/b.jpg',
+      filename: 'b.jpg',
+      width: 100,
+      height: 100,
+      split: 'validation',
+      embedding2d: [1, 1],
+      detections: [
+        { id: 'b-0', label: 'wajueji', confidence: 1, bbox: [0.1, 0.1, 0.5, 0.5], isGroundTruth: true },
+      ],
+      metadata: {
+        source: 'unit',
+        captureDate: '2026-06-17',
+        tags: ['dim'],
+        semantics: {
+          lighting: 'dim',
+          viewpoint: 'side',
+          blur: 'slight-blur',
+          weather: 'cloudy',
+          timeOfDay: 'night',
+          environment: 'outdoor',
+        },
+      },
+    },
+  ],
+};
+
+test('initial store waits for explicit zip upload before showing dataset images', () => {
+  const state = useGalleryStore.getState();
+
+  assert.equal(state.datasetInfo.id, 'empty');
+  assert.equal(state.datasetInfo.imageCount, 0);
+  assert.deepEqual(state.images, []);
+  assert.deepEqual(state.categories, []);
+  assert.equal(state.getFilteredImages().length, 0);
+});
+
+test('applyDataset loads backend categories and keeps semantic controls display-only', () => {
+  const store = useGalleryStore.getState();
+  store.applyDataset(payload);
+
+  let state = useGalleryStore.getState();
+  assert.equal(state.datasetInfo.id, 'unit-dataset');
+  assert.deepEqual(state.categories, ['diaoche', 'wajueji']);
+  assert.equal(state.getFilteredImages().length, 2);
+
+  state.setSemanticFilter('lighting', ['bright']);
+  state = useGalleryStore.getState();
+  assert.equal(state.getFilteredImages().length, 2);
+
+  state.setSelectedCategories(['diaoche']);
+  state = useGalleryStore.getState();
+  assert.deepEqual(
+    state.getFilteredImages().map((image) => image.id),
+    ['train-a']
+  );
+});
+
+test('progressive image limit controls how many filtered images are rendered first', () => {
+  const store = useGalleryStore.getState();
+  store.applyDataset({
+    ...payload,
+    info: { ...payload.info, id: 'progressive-dataset', imageCount: 2 },
+    images: payload.images,
+  });
+  store.setVisibleImageLimit(1);
+
+  let state = useGalleryStore.getState();
+  assert.equal(state.getVisibleFilteredImages().length, 1);
+  assert.equal(state.getFilteredImages().length, 2);
+
+  state.loadMoreImages();
+  state = useGalleryStore.getState();
+  assert.equal(state.getVisibleFilteredImages().length, 2);
+});

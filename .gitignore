@@ -118,6 +118,7 @@ pids
 *.pid
 *.seed
 *.pid.lock
+.dataset-store/
 # Diagnostic reports
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Cache
@@ -159,3 +160,5 @@ Desktop.ini
 *.tsbuildinfo
 # Misc
 .coze-logs
+.claude/
+test/

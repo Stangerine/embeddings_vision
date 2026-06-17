@@ -356,6 +356,7 @@ export const datasetInfo: DatasetInfo = {
 
 // Generate placeholder image URLs using picsum
 export function getImageUrl(imageId: string, width: number = 300, height: number = 200): string {
+  if (imageId.startsWith('/api/')) return imageId;
   const idx = parseInt(imageId.replace('img-', ''), 10);
   return `https://picsum.photos/seed/det${idx}/${width}/${height}`;
 }

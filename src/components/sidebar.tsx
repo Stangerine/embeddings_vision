@@ -2,7 +2,6 @@
 
 import { useGalleryStore } from '@/lib/store';
 import {
-  CATEGORIES,
   SEMANTIC_LABELS,
   SEMANTIC_OPTIONS,
   SEMANTIC_VALUE_LABELS,
@@ -19,6 +18,7 @@ export function Sidebar() {
     toggleSplit,
     setSelectedSplits,
     images,
+    categories,
     toggleSemanticFilter,
     setSemanticFilter,
   } = useGalleryStore();
@@ -109,12 +109,12 @@ export function Sidebar() {
         <FilterHeader
           title="目标类别"
           selected={filters.selectedCategories.length}
-          total={CATEGORIES.length}
-          onSelectAll={() => setSelectedCategories([...CATEGORIES])}
+          total={categories.length}
+          onSelectAll={() => setSelectedCategories([...categories])}
           onClear={() => setSelectedCategories([])}
         />
         <div className="space-y-1">
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const checked = filters.selectedCategories.includes(cat);
             const count = categoryCounts[cat] || 0;
             return (

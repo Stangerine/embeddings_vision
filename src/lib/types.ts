@@ -59,6 +59,33 @@ export interface DatasetInfo {
   };
 }
 
+export interface DatasetPayload {
+  info: DatasetInfo;
+  images: DatasetImage[];
+  categories: string[];
+  categoryCounts: Record<string, number>;
+  embedding: {
+    model: string;
+    modelPath: string;
+    status: 'pending' | 'running' | 'ready' | 'fallback';
+    method: string;
+    dimensions: number;
+    generatedAt: string;
+    message: string;
+  };
+}
+
+export interface DatasetUploadJob {
+  jobId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  stage: string;
+  progress: number;
+  message: string;
+  cached: boolean;
+  dataset: DatasetPayload | null;
+  error: string | null;
+}
+
 export type ViewMode = 'grid' | 'scatter';
 
 export type ColorByMode =

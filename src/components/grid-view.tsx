@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useCallback } from 'react';
 import { useGalleryStore } from '@/lib/store';
-import { CATEGORY_COLORS, SPLIT_SHORT_LABELS, getImageUrl } from '@/lib/mock-data';
+import { CATEGORY_COLORS, SPLIT_SHORT_LABELS } from '@/lib/mock-data';
+import { resolveImageSrc } from '@/lib/image-src';
 import type { DatasetImage, BoundingBox } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -103,7 +104,7 @@ function ImageCard({ image }: { image: DatasetImage }) {
         
         {/* Image */}
         <img
-          src={getImageUrl(image.id, 400, Math.round(400 / aspectRatio))}
+          src={resolveImageSrc(image, 400, Math.round(400 / aspectRatio))}
           alt={image.filename}
           className="absolute inset-0 w-full h-full object-cover"
           loading="lazy"
@@ -174,15 +175,26 @@ function ImageCard({ image }: { image: DatasetImage }) {
 }
 
 export function GridView() {
-  const { getFilteredImages, gridColumns, setGridColumns } = useGalleryStore();
+  const {
+    getFilteredImages,
+    getVisibleFilteredImages,
+    gridColumns,
+    setGridColumns,
+    datasetInfo,
+    isUploadingDataset,
+    loadMoreImages,
+  } = useGalleryStore();
   const filteredImages = getFilteredImages();
+  const visibleImages = getVisibleFilteredImages();
+  const hasDataset = datasetInfo.imageCount > 0;
+  const canLoadMore = visibleImages.length < filteredImages.length;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Grid controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[#E2E8F0]">
         <span className="text-xs text-[#475569]">
-          共 {filteredImages.length} 张图片
+          已显示 {visibleImages.length} / {filteredImages.length} 张图片
         </span>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-[#64748B]">密度</span>
@@ -204,7 +216,13 @@ export function GridView() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <div className="text-3xl mb-2 opacity-30">⊘</div>
-              <p className="text-sm text-[#64748B]">没有符合当前筛选条件的图片</p>
+              <p className="text-sm text-[#64748B]">
+                {isUploadingDataset
+                  ? '正在解析上传的数据集...'
+                  : hasDataset
+                    ? '没有符合当前筛选条件的图片'
+                    : '请点击顶部“上传 ZIP”加载数据集'}
+              </p>
             </div>
           </div>
         ) : (
@@ -214,9 +232,18 @@ export function GridView() {
               gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
             }}
           >
-            {filteredImages.map((image) => (
+            {visibleImages.map((image) => (
               <ImageCard key={image.id} image={image} />
             ))}
+            {canLoadMore && (
+              <button
+                type="button"
+                onClick={loadMoreImages}
+                className="col-span-full mt-2 h-10 rounded-md border border-[#CBD5E1] bg-white text-xs font-medium text-[#475569] transition-colors hover:border-[#93C5FD] hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
+              >
+                加载更多图片
+              </button>
+            )}
           </div>
         )}
       </div>

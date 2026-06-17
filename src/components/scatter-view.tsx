@@ -10,8 +10,8 @@ import {
   SPLIT_COLORS,
   SPLIT_LABELS,
   SPLIT_SHORT_LABELS,
-  getImageUrl,
 } from '@/lib/mock-data';
+import { resolveImageSrc } from '@/lib/image-src';
 import type { DatasetImage } from '@/lib/types';
 import type { ColorByMode } from '@/lib/types';
 import { useCleaningIssues } from '@/hooks/use-cleaning-issues';
@@ -1011,7 +1011,7 @@ function SelectedImageCard({ image }: { image: DatasetImage }) {
     >
       {/* Image */}
       <img
-        src={getImageUrl(image.id, 240, Math.round(240 / aspectRatio))}
+        src={resolveImageSrc(image, 240, Math.round(240 / aspectRatio))}
         alt={image.filename}
         className="w-full h-full object-cover"
         loading="lazy"

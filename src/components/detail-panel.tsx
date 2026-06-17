@@ -6,11 +6,11 @@ import {
   SEMANTIC_COLORS,
   SEMANTIC_LABELS,
   SEMANTIC_VALUE_LABELS,
-  getImageUrl,
   getConfidenceColor,
   SPLIT_COLORS,
   SPLIT_LABELS,
 } from '@/lib/mock-data';
+import { resolveImageSrc } from '@/lib/image-src';
 import type { ColorByMode, SemanticAttributes } from '@/lib/types';
 
 export function DetailPanel() {
@@ -156,7 +156,7 @@ export function DetailPanel() {
       <div className="p-3 border-b border-[#E2E8F0]">
         <div className="relative rounded-lg overflow-hidden bg-[#F8FAFC]">
           <img
-            src={getImageUrl(selectedImage.id, 600, 400)}
+            src={resolveImageSrc(selectedImage, 600, 400)}
             alt={selectedImage.filename}
             className="w-full h-auto"
           />
@@ -346,7 +346,7 @@ export function DetailPanel() {
               className="relative group rounded overflow-hidden bg-[#F8FAFC] aspect-square hover:ring-1 hover:ring-[#2563EB] transition-all"
             >
               <img
-                src={getImageUrl(image.id, 100, 100)}
+                src={resolveImageSrc(image, 100, 100)}
                 alt={image.filename}
                 className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity"
                 loading="lazy"
