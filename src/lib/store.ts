@@ -282,8 +282,12 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       // Scatter selection filter
       if (scatterSelection.length > 0 && !scatterSelection.includes(img.id)) return false;
 
-      // Semantic filters are intentionally display-only for now. The controls stay visible,
-      // but semantic filtering will be backed by real semantic attributes in a later phase.
+      // Semantic attribute filters - selected values within the same dimension are OR'ed.
+      for (const [key, values] of Object.entries(filters.selectedSemantics)) {
+        if (!values || values.length === 0) return false;
+        const semanticKey = key as keyof SemanticAttributes;
+        if (!values.includes(img.metadata.semantics[semanticKey])) return false;
+      }
       
       // Search query
       if (filters.searchQuery) {

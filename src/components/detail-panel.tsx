@@ -269,6 +269,7 @@ export function DetailPanel() {
         <div className="grid grid-cols-2 gap-1.5">
           {(Object.keys(selectedImage.metadata.semantics) as (keyof SemanticAttributes)[]).map((key) => {
             const value = selectedImage.metadata.semantics[key];
+            const meta = selectedImage.metadata.semanticMeta?.[key];
             return (
               <div key={key} className="rounded bg-[#F8FAFC]/50 px-2 py-1.5">
                 <span className="block text-[9px] text-[#64748B] uppercase tracking-wider">
@@ -281,6 +282,13 @@ export function DetailPanel() {
                   />
                   {SEMANTIC_VALUE_LABELS[key][value]}
                 </span>
+                {meta && (
+                  <span className="mt-0.5 block text-[9px] text-[#94A3B8]">
+                    {meta.source === 'bge-zero-shot' ? 'BGE推断' : meta.source}
+                    {' '}
+                    {(meta.confidence * 100).toFixed(0)}%
+                  </span>
+                )}
               </div>
             );
           })}

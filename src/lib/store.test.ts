@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { useGalleryStore } from './store';
+import { SEMANTIC_OPTIONS } from './mock-data';
 import type { DatasetPayload } from './types';
 
 const payload: DatasetPayload = {
@@ -88,7 +89,7 @@ test('initial store waits for explicit zip upload before showing dataset images'
   assert.equal(state.getFilteredImages().length, 0);
 });
 
-test('applyDataset loads backend categories and keeps semantic controls display-only', () => {
+test('applyDataset loads backend categories and applies semantic filters', () => {
   const store = useGalleryStore.getState();
   store.applyDataset(payload);
 
@@ -99,7 +100,10 @@ test('applyDataset loads backend categories and keeps semantic controls display-
 
   state.setSemanticFilter('lighting', ['bright']);
   state = useGalleryStore.getState();
-  assert.equal(state.getFilteredImages().length, 2);
+  assert.deepEqual(
+    state.getFilteredImages().map((image) => image.id),
+    ['train-a']
+  );
 
   state.setSelectedCategories(['diaoche']);
   state = useGalleryStore.getState();
@@ -116,6 +120,7 @@ test('progressive image limit controls how many filtered images are rendered fir
     info: { ...payload.info, id: 'progressive-dataset', imageCount: 2 },
     images: payload.images,
   });
+  store.setSemanticFilter('lighting', [...SEMANTIC_OPTIONS.lighting]);
   store.setVisibleImageLimit(1);
 
   let state = useGalleryStore.getState();

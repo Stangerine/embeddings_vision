@@ -26,6 +26,11 @@ export interface SemanticAttributes {
   environment: EnvironmentType;
 }
 
+export interface SemanticMeta {
+  source: 'placeholder' | 'bge-zero-shot' | 'manual' | string;
+  confidence: number;
+}
+
 export interface DatasetImage {
   id: string;
   filepath: string;
@@ -42,6 +47,7 @@ export interface DatasetImage {
     captureDate: string;
     tags: string[];
     semantics: SemanticAttributes;
+    semanticMeta?: Partial<Record<keyof SemanticAttributes, SemanticMeta>>;
   };
 }
 

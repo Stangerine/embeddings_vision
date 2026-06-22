@@ -33,6 +33,8 @@ BGE_DEVICE = os.environ.get("BGE_DEVICE")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 BGE_MODEL = None
 BGE_MODEL_LOCK = threading.Lock()
+SEMANTIC_TEXT_EMBEDDINGS = None
+SEMANTIC_TEXT_EMBEDDINGS_LOCK = threading.Lock()
 
 SPLIT_NAMES = ("train", "val", "validation", "test")
 SEMANTIC_OPTIONS: dict[str, list[str]] = {
@@ -42,6 +44,51 @@ SEMANTIC_OPTIONS: dict[str, list[str]] = {
     "weather": ["clear", "cloudy", "rain", "snow", "fog", "indoor"],
     "timeOfDay": ["day", "dusk", "night"],
     "environment": ["indoor", "outdoor", "urban", "rural", "road", "aerial"],
+}
+SEMANTIC_PROMPTS: dict[str, dict[str, str]] = {
+    "lighting": {
+        "bright": "a bright well-lit construction or vehicle image",
+        "dim": "a dimly lit construction or vehicle image",
+        "backlit": "a backlit construction or vehicle image",
+        "low-light": "a low light construction or vehicle image",
+        "mixed": "an image with mixed lighting",
+    },
+    "viewpoint": {
+        "front": "a front view of a vehicle or machine",
+        "side": "a side view of a vehicle or machine",
+        "rear": "a rear view of a vehicle or machine",
+        "top-down": "a top down view of a vehicle or machine",
+        "aerial": "an aerial view image",
+        "wide": "a wide angle scene",
+        "close-up": "a close up view of the object",
+    },
+    "blur": {
+        "sharp": "a sharp clear image",
+        "slight-blur": "a slightly blurry image",
+        "motion-blur": "an image with motion blur",
+        "out-of-focus": "an out of focus image",
+    },
+    "weather": {
+        "clear": "a clear weather outdoor image",
+        "cloudy": "a cloudy weather image",
+        "rain": "a rainy weather image",
+        "snow": "a snowy weather image",
+        "fog": "a foggy weather image",
+        "indoor": "an indoor image",
+    },
+    "timeOfDay": {
+        "day": "a daytime image",
+        "dusk": "an image captured at dusk",
+        "night": "a nighttime image",
+    },
+    "environment": {
+        "indoor": "an indoor environment",
+        "outdoor": "an outdoor environment",
+        "urban": "an urban city environment",
+        "rural": "a rural environment",
+        "road": "a road construction environment",
+        "aerial": "an aerial environment",
+    },
 }
 
 
@@ -604,6 +651,7 @@ def apply_embedding_projection(
             embeddings = get_cached_or_encode_image_embeddings(images, store_root)
             if dataset_id is not None:
                 persist_dataset_embeddings(store_root, dataset_id, images, embeddings)
+            apply_bge_semantic_classification(images, embeddings)
             projected = project_to_2d(embeddings)
             for image, point in zip(images, projected):
                 image["embedding2d"] = [round(point[0], 4), round(point[1], 4)]
@@ -670,6 +718,80 @@ def encode_images_with_bge(images: list[dict[str, Any]]) -> list[list[float]]:
     image_paths = [image["_absolutePath"] for image in images]
     encoded = model.encode(image_paths, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
     return encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
+
+
+def encode_texts_with_bge(prompts: list[str]) -> list[list[float]]:
+    model = get_bge_model()
+    encoded = model.encode(prompts, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
+    return encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
+
+
+def apply_bge_semantic_classification(
+    images: list[dict[str, Any]],
+    image_embeddings: list[list[float]],
+) -> None:
+    text_embeddings = get_semantic_text_embeddings()
+    for image, image_embedding in zip(images, image_embeddings):
+        semantics: dict[str, str] = {}
+        semantic_meta: dict[str, dict[str, Any]] = {}
+        for key, candidates in SEMANTIC_PROMPTS.items():
+            labels = list(candidates)
+            scores = [
+                cosine_similarity(image_embedding, text_embeddings[key][label])
+                for label in labels
+            ]
+            best_index = max(range(len(labels)), key=lambda index: scores[index])
+            confidence = softmax_confidence(scores, best_index)
+            semantics[key] = labels[best_index]
+            semantic_meta[key] = {
+                "source": "bge-zero-shot",
+                "confidence": round(confidence, 4),
+            }
+        image["metadata"]["semantics"] = semantics
+        image["metadata"]["semanticMeta"] = semantic_meta
+
+
+def get_semantic_text_embeddings() -> dict[str, dict[str, list[float]]]:
+    global SEMANTIC_TEXT_EMBEDDINGS
+    if SEMANTIC_TEXT_EMBEDDINGS is not None:
+        return SEMANTIC_TEXT_EMBEDDINGS
+
+    with SEMANTIC_TEXT_EMBEDDINGS_LOCK:
+        if SEMANTIC_TEXT_EMBEDDINGS is None:
+            prompts: list[str] = []
+            prompt_keys: list[tuple[str, str]] = []
+            for key, candidates in SEMANTIC_PROMPTS.items():
+                for label, prompt in candidates.items():
+                    prompt_keys.append((key, label))
+                    prompts.append(prompt)
+
+            encoded = encode_texts_with_bge(prompts)
+            result: dict[str, dict[str, list[float]]] = {}
+            for (key, label), vector in zip(prompt_keys, encoded):
+                result.setdefault(key, {})[label] = [float(value) for value in vector]
+            SEMANTIC_TEXT_EMBEDDINGS = result
+        return SEMANTIC_TEXT_EMBEDDINGS
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    length = min(len(a), len(b))
+    if length == 0:
+        return 0.0
+    dot = sum(a[index] * b[index] for index in range(length))
+    norm_a = math.sqrt(sum(a[index] * a[index] for index in range(length)))
+    norm_b = math.sqrt(sum(b[index] * b[index] for index in range(length)))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def softmax_confidence(scores: list[float], best_index: int) -> float:
+    if not scores:
+        return 0.0
+    max_score = max(scores)
+    exps = [math.exp(score - max_score) for score in scores]
+    total = sum(exps)
+    return exps[best_index] / total if total else 0.0
 
 
 def get_cached_or_encode_image_embeddings(
