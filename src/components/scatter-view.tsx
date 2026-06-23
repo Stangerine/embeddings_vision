@@ -6,6 +6,7 @@ import {
   CATEGORY_COLORS,
   SEMANTIC_COLORS,
   SEMANTIC_LABELS,
+  SEMANTIC_OPTIONS,
   SEMANTIC_VALUE_LABELS,
   SPLIT_COLORS,
   SPLIT_LABELS,
@@ -18,6 +19,20 @@ import { useCleaningIssues } from '@/hooks/use-cleaning-issues';
 import { cn } from '@/lib/utils';
 
 type SelectionTool = 'rect' | 'polygon' | 'lasso';
+
+function getSemanticValueLabel(key: ColorByMode, value: string): string {
+  if (
+    key === 'lighting' ||
+    key === 'viewpoint' ||
+    key === 'blur' ||
+    key === 'weather' ||
+    key === 'timeOfDay' ||
+    key === 'environment'
+  ) {
+    return SEMANTIC_VALUE_LABELS[key][value] || value;
+  }
+  return value;
+}
 
 interface ScreenPoint {
   x: number;
@@ -630,9 +645,9 @@ export function ScatterView() {
       colorByMode === 'timeOfDay' ||
       colorByMode === 'environment'
     ) {
-      return Object.entries(SEMANTIC_COLORS[colorByMode]).map(([value, color]) => ({
-        label: SEMANTIC_VALUE_LABELS[colorByMode][value],
-        color,
+      return SEMANTIC_OPTIONS[colorByMode].map((value) => ({
+        label: getSemanticValueLabel(colorByMode, value),
+        color: SEMANTIC_COLORS[colorByMode][value] || '#94a3b8',
         count: images.filter((img) => img.metadata.semantics[colorByMode] === value).length,
       }));
     }
@@ -873,9 +888,9 @@ export function ScatterView() {
                   <div>
                     语义:{' '}
                     <span className="text-[#0F172A]">
-                      {SEMANTIC_VALUE_LABELS.timeOfDay[hoveredPoint.image.metadata.semantics.timeOfDay]},{' '}
-                      {SEMANTIC_VALUE_LABELS.environment[hoveredPoint.image.metadata.semantics.environment]},{' '}
-                      {SEMANTIC_VALUE_LABELS.blur[hoveredPoint.image.metadata.semantics.blur]}
+                      {getSemanticValueLabel('timeOfDay', hoveredPoint.image.metadata.semantics.timeOfDay)},{' '}
+                      {getSemanticValueLabel('environment', hoveredPoint.image.metadata.semantics.environment)},{' '}
+                      {getSemanticValueLabel('blur', hoveredPoint.image.metadata.semantics.blur)}
                     </span>
                   </div>
                   <div>

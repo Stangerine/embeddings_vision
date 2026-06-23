@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import io
 import json
+import logging
 import math
 import os
 import re
@@ -15,10 +18,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
+from urllib.request import Request as UrlRequest, urlopen
 from xml.etree import ElementTree
 
 import numpy as np
 from PIL import Image
+
+from config.dataset_settings import (
+    BGE_SETTINGS,
+    DATASET_SETTINGS,
+    SEMANTIC_OPTIONS,
+    SEMANTIC_PROMPTS,
+    SEMANTIC_RUNTIME_SETTINGS,
+)
 
 try:
     from sklearn.decomposition import PCA
@@ -26,70 +38,25 @@ except Exception:  # pragma: no cover - sklearn is present in the target env
     PCA = None
 
 
-STORE_ROOT = Path(os.environ.get("DATASET_STORE_ROOT", ".dataset-store")).resolve()
-BGE_MODEL_PATH = Path(os.environ.get("BGE_VL_MODEL_PATH", "/home/shao/zzq/model/BGE-VL-large"))
-BGE_BATCH_SIZE = int(os.environ.get("BGE_BATCH_SIZE", "8"))
-BGE_DEVICE = os.environ.get("BGE_DEVICE")
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+LOGGER = logging.getLogger(__name__)
+STORE_ROOT = DATASET_SETTINGS.store_root
+BGE_MODEL_PATH = BGE_SETTINGS.model_path
+BGE_BATCH_SIZE = BGE_SETTINGS.batch_size
+BGE_EMBEDDING_CHUNK_SIZE = BGE_SETTINGS.embedding_chunk_size
+BGE_DEVICE = BGE_SETTINGS.device
+BGE_PRELOAD_ON_STARTUP = BGE_SETTINGS.preload_on_startup
+SEMANTIC_CONFIG_PATH = SEMANTIC_RUNTIME_SETTINGS.config_path
+IMAGE_EXTENSIONS = DATASET_SETTINGS.image_extensions
 BGE_MODEL = None
 BGE_MODEL_LOCK = threading.Lock()
 SEMANTIC_TEXT_EMBEDDINGS = None
 SEMANTIC_TEXT_EMBEDDINGS_LOCK = threading.Lock()
+SEMANTIC_CONFIG = None
+SEMANTIC_CONFIG_LOCK = threading.Lock()
+BGE_IMAGE_INFERENCE_STATS: dict[str, Any] | None = None
 
-SPLIT_NAMES = ("train", "val", "validation", "test")
-SEMANTIC_OPTIONS: dict[str, list[str]] = {
-    "lighting": ["bright", "dim", "backlit", "low-light", "mixed"],
-    "viewpoint": ["front", "side", "rear", "top-down", "aerial", "wide", "close-up"],
-    "blur": ["sharp", "slight-blur", "motion-blur", "out-of-focus"],
-    "weather": ["clear", "cloudy", "rain", "snow", "fog", "indoor"],
-    "timeOfDay": ["day", "dusk", "night"],
-    "environment": ["indoor", "outdoor", "urban", "rural", "road", "aerial"],
-}
-SEMANTIC_PROMPTS: dict[str, dict[str, str]] = {
-    "lighting": {
-        "bright": "a bright well-lit construction or vehicle image",
-        "dim": "a dimly lit construction or vehicle image",
-        "backlit": "a backlit construction or vehicle image",
-        "low-light": "a low light construction or vehicle image",
-        "mixed": "an image with mixed lighting",
-    },
-    "viewpoint": {
-        "front": "a front view of a vehicle or machine",
-        "side": "a side view of a vehicle or machine",
-        "rear": "a rear view of a vehicle or machine",
-        "top-down": "a top down view of a vehicle or machine",
-        "aerial": "an aerial view image",
-        "wide": "a wide angle scene",
-        "close-up": "a close up view of the object",
-    },
-    "blur": {
-        "sharp": "a sharp clear image",
-        "slight-blur": "a slightly blurry image",
-        "motion-blur": "an image with motion blur",
-        "out-of-focus": "an out of focus image",
-    },
-    "weather": {
-        "clear": "a clear weather outdoor image",
-        "cloudy": "a cloudy weather image",
-        "rain": "a rainy weather image",
-        "snow": "a snowy weather image",
-        "fog": "a foggy weather image",
-        "indoor": "an indoor image",
-    },
-    "timeOfDay": {
-        "day": "a daytime image",
-        "dusk": "an image captured at dusk",
-        "night": "a nighttime image",
-    },
-    "environment": {
-        "indoor": "an indoor environment",
-        "outdoor": "an outdoor environment",
-        "urban": "an urban city environment",
-        "rural": "a rural environment",
-        "road": "a road construction environment",
-        "aerial": "an aerial environment",
-    },
-}
+SPLIT_NAMES = DATASET_SETTINGS.split_names
+SEMANTIC_SCHEMA_VERSION = SEMANTIC_RUNTIME_SETTINGS.schema_version
 
 
 @dataclass(frozen=True)
@@ -101,7 +68,7 @@ class SplitRoot:
 class DatasetService:
     def __init__(self, store_root: Path = STORE_ROOT, enable_bge: bool | None = None) -> None:
         self.store_root = store_root
-        self.enable_bge = os.environ.get("BGE_VL_ENABLE", "1") != "0" if enable_bge is None else enable_bge
+        self.enable_bge = BGE_SETTINGS.enabled if enable_bge is None else enable_bge
         self.embedding_delay_seconds = 0.0
         self._job_lock = threading.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
@@ -111,7 +78,11 @@ class DatasetService:
         payload = self._read_dataset("current")
         if payload is not None:
             return payload
-        raise FileNotFoundError("No dataset is loaded. Upload a zip dataset first.")
+        payload = self._read_latest_cached_dataset()
+        if payload is not None:
+            self._write_dataset("current", payload)
+            return payload
+        raise FileNotFoundError("未加载任何数据集")
 
     def create_dataset_from_zip(
         self,
@@ -242,7 +213,23 @@ class DatasetService:
             return dict(job)
 
     def _run_upload_job(self, job_id: str, upload_path: Path, filename: str, content_hash: str) -> None:
-        def progress(stage: str, value: int, message: str) -> None:
+        def progress(stage: str | dict[str, int], value: int | None = None, message: str | None = None) -> None:
+            if isinstance(stage, dict):
+                total = max(stage.get("missingImages", stage.get("totalImages", 0)), 1)
+                encoded = stage.get("encodedImages", 0)
+                percent = min(95, 75 + round((encoded / total) * 20))
+                chunk_index = stage.get("chunkIndex", 0)
+                chunks = stage.get("chunks", 0)
+                self._update_job(
+                    job_id,
+                    stage="embedding",
+                    progress=percent,
+                    message=(
+                        f"正在生成 BGE embedding：{encoded}/{total} 张"
+                        f"（chunk {chunk_index}/{chunks}，缓存命中 {stage.get('cacheHits', 0)} 张）"
+                    ),
+                )
+                return
             self._update_job(job_id, stage=stage, progress=value, message=message)
 
         try:
@@ -356,6 +343,7 @@ class DatasetService:
             self.enable_bge,
             store_root=self.store_root,
             dataset_id=dataset_id,
+            progress=progress,
         )
         for image in images:
             image.pop("_absolutePath", None)
@@ -461,6 +449,8 @@ class DatasetService:
             "source": {
                 "archive": str(source_archive) if source_archive else None,
                 "root": str(dataset_dir),
+                "semanticSchemaVersion": SEMANTIC_SCHEMA_VERSION,
+                "semanticProvider": get_semantic_config()["provider"],
             },
         }
 
@@ -478,7 +468,26 @@ class DatasetService:
         metadata_path = self.store_root / "_cache" / sanitize_id(content_hash) / "dataset.json"
         if not metadata_path.exists():
             return None
-        return json.loads(metadata_path.read_text(encoding="utf-8"))
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return payload if is_semantic_cache_valid(payload) else None
+
+    def _read_latest_cached_dataset(self) -> dict[str, Any] | None:
+        cache_root = self.store_root / "_cache"
+        if not cache_root.exists():
+            return None
+        metadata_paths = sorted(
+            cache_root.glob("*/dataset.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for metadata_path in metadata_paths:
+            try:
+                payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if is_semantic_cache_valid(payload):
+                return payload
+        return None
 
     def _write_cached_hash(self, content_hash: str, payload: dict[str, Any]) -> None:
         cache_dir = self.store_root / "_cache" / sanitize_id(content_hash)
@@ -503,7 +512,8 @@ class DatasetService:
         metadata_path = self.store_root / sanitize_id(dataset_id) / "dataset.json"
         if not metadata_path.exists():
             return None
-        return json.loads(metadata_path.read_text(encoding="utf-8"))
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return payload if is_semantic_cache_valid(payload) else None
 
     def _write_dataset(self, dataset_id: str, payload: dict[str, Any]) -> None:
         metadata_dir = self.store_root / sanitize_id(dataset_id)
@@ -645,13 +655,14 @@ def apply_embedding_projection(
     *,
     store_root: Path = STORE_ROOT,
     dataset_id: str | None = None,
+    progress: Any = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     if enable_bge and BGE_MODEL_PATH.exists() and images:
         try:
-            embeddings = get_cached_or_encode_image_embeddings(images, store_root)
+            embeddings = get_cached_or_encode_image_embeddings(images, store_root, progress=progress)
             if dataset_id is not None:
                 persist_dataset_embeddings(store_root, dataset_id, images, embeddings)
-            apply_bge_semantic_classification(images, embeddings)
+            apply_semantic_classification(images, embeddings)
             projected = project_to_2d(embeddings)
             for image, point in zip(images, projected):
                 image["embedding2d"] = [round(point[0], 4), round(point[1], 4)]
@@ -660,6 +671,7 @@ def apply_embedding_projection(
                 "method": "BGE-VL-large image embeddings + PCA",
                 "message": "已使用 /home/shao/zzq/model/BGE-VL-large 生成图像 embedding，复用单图缓存后通过 PCA 降到二维用于向量分布展示。",
                 "dimensions": str(len(embeddings[0]) if embeddings else 0),
+                "performance": BGE_IMAGE_INFERENCE_STATS or {},
             }
         except Exception as exc:
             images = apply_feature_projection(images)
@@ -688,6 +700,7 @@ def build_embedding_info(embedding_meta: dict[str, str]) -> dict[str, Any]:
         "dimensions": int(embedding_meta.get("dimensions", "2")),
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "message": embedding_meta["message"],
+        "performance": embedding_meta.get("performance", {}),
     }
 
 
@@ -751,6 +764,218 @@ def apply_bge_semantic_classification(
         image["metadata"]["semanticMeta"] = semantic_meta
 
 
+def apply_semantic_classification(
+    images: list[dict[str, Any]],
+    image_embeddings: list[list[float]],
+) -> None:
+    config = get_semantic_config()
+    if config["provider"] == "gpt-vision":
+        try:
+            apply_gpt_vision_semantic_classification(images, config["gptVision"])
+            return
+        except Exception as exc:
+            for image in images:
+                image.setdefault("metadata", {})["semanticProviderError"] = str(exc)
+    apply_bge_semantic_classification(images, image_embeddings)
+
+
+def get_semantic_config() -> dict[str, Any]:
+    global SEMANTIC_CONFIG
+    if SEMANTIC_CONFIG is not None:
+        return SEMANTIC_CONFIG
+
+    with SEMANTIC_CONFIG_LOCK:
+        if SEMANTIC_CONFIG is None:
+            config: dict[str, Any] = {
+                "provider": SEMANTIC_RUNTIME_SETTINGS.provider,
+                "gptVision": {
+                    "baseUrl": SEMANTIC_RUNTIME_SETTINGS.gpt_vision.base_url,
+                    "apiKey": SEMANTIC_RUNTIME_SETTINGS.gpt_vision.api_key,
+                    "model": SEMANTIC_RUNTIME_SETTINGS.gpt_vision.model,
+                    "timeoutSeconds": SEMANTIC_RUNTIME_SETTINGS.gpt_vision.timeout_seconds,
+                    "maxImageSize": SEMANTIC_RUNTIME_SETTINGS.gpt_vision.max_image_size,
+                },
+            }
+            if SEMANTIC_CONFIG_PATH.exists():
+                local_config = json.loads(SEMANTIC_CONFIG_PATH.read_text(encoding="utf-8"))
+                config = merge_dicts(config, local_config)
+            config["provider"] = str(config.get("provider", "bge")).lower()
+            SEMANTIC_CONFIG = config
+        return SEMANTIC_CONFIG
+
+
+def merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = merge_dicts(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def apply_gpt_vision_semantic_classification(
+    images: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> None:
+    for image in images:
+        semantics = classify_image_semantics_with_gpt(image, config)
+        image["metadata"]["semantics"] = semantics
+        image["metadata"]["semanticMeta"] = {
+            key: {"source": "gpt-vision", "confidence": 1.0}
+            for key in SEMANTIC_OPTIONS
+        }
+
+
+def classify_image_semantics_with_gpt(image: dict[str, Any], config: dict[str, Any]) -> dict[str, str]:
+    api_key = str(config.get("apiKey", ""))
+    if not api_key:
+        raise ValueError("GPT vision semantic provider requires apiKey.")
+    base_url = str(config.get("baseUrl", "")).rstrip("/")
+    if not base_url:
+        raise ValueError("GPT vision semantic provider requires baseUrl.")
+
+    image_url = image_to_data_url(Path(image["_absolutePath"]), int(config.get("maxImageSize", 768)))
+    response = call_openai_compatible_chat(
+        base_url=base_url,
+        api_key=api_key,
+        model=str(config.get("model", "gpt-5.5")),
+        timeout_seconds=int(config.get("timeoutSeconds", 60)),
+        image_url=image_url,
+    )
+    parsed = parse_semantic_json(response)
+    return normalize_semantic_response(parsed)
+
+
+def image_to_data_url(path: Path, max_size: int) -> str:
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+        rgb.thumbnail((max_size, max_size))
+        output = io.BytesIO()
+        rgb.save(output, format="JPEG", quality=85)
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
+
+
+def call_openai_compatible_chat(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    timeout_seconds: int,
+    image_url: str,
+) -> str:
+    payload = {
+        "model": model,
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You classify construction or vehicle dataset images into fixed labels. Return only valid JSON.",
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": build_gpt_semantic_prompt(),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_url},
+                    },
+                ],
+            },
+        ],
+    }
+    request = UrlRequest(
+        f"{base_url}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=timeout_seconds) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    choice = body.get("choices", [{}])[0]
+    message = choice.get("message", {})
+    content = message.get("content", "")
+    if isinstance(content, list):
+        text_parts = [part.get("text", "") for part in content if isinstance(part, dict)]
+        return "\n".join(text_parts)
+    return str(content)
+
+
+def build_gpt_semantic_prompt() -> str:
+    options = {
+        key: [
+            {
+                "label": label,
+                "description": SEMANTIC_PROMPTS[key][label],
+            }
+            for label in labels
+        ]
+        for key, labels in SEMANTIC_OPTIONS.items()
+    }
+    return (
+        "Analyze the image and choose exactly one label id for each semantic field. "
+        "Use only the label ids listed below. Each label has an English visual description; "
+        "choose the closest visible match. Do not invent labels. "
+        f"Semantic options: {json.dumps(options, ensure_ascii=False)}. "
+        "Return JSON only, with no markdown, in this exact shape: "
+        '{"lighting":"","viewpoint":"","blur":"","weather":"","timeOfDay":"","environment":""}'
+    )
+
+
+def parse_semantic_json(text: str) -> dict[str, Any]:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```$", "", stripped)
+    match = re.search(r"\{.*\}", stripped, flags=re.S)
+    if not match:
+        raise ValueError(f"GPT semantic response is not JSON: {text[:200]}")
+    return json.loads(match.group(0))
+
+
+def normalize_semantic_response(parsed: dict[str, Any]) -> dict[str, str]:
+    semantics: dict[str, str] = {}
+    for key, options in SEMANTIC_OPTIONS.items():
+        value = parsed.get(key)
+        if not isinstance(value, str) or value not in options:
+            raise ValueError(f"Invalid semantic label for {key}: {value!r}")
+        semantics[key] = value
+    return semantics
+
+
+def is_semantic_cache_valid(payload: dict[str, Any]) -> bool:
+    source = payload.get("source")
+    if not isinstance(source, dict):
+        return False
+    if source.get("semanticSchemaVersion") != SEMANTIC_SCHEMA_VERSION:
+        return False
+    if source.get("semanticProvider") != get_semantic_config()["provider"]:
+        return False
+
+    allowed = {key: set(values) for key, values in SEMANTIC_OPTIONS.items()}
+    images = payload.get("images")
+    if not isinstance(images, list):
+        return False
+
+    for image in images:
+        metadata = image.get("metadata") if isinstance(image, dict) else None
+        semantics = metadata.get("semantics") if isinstance(metadata, dict) else None
+        if not isinstance(semantics, dict):
+            return False
+        for key, values in allowed.items():
+            value = semantics.get(key)
+            if not isinstance(value, str) or value not in values:
+                return False
+    return True
+
+
 def get_semantic_text_embeddings() -> dict[str, dict[str, list[float]]]:
     global SEMANTIC_TEXT_EMBEDDINGS
     if SEMANTIC_TEXT_EMBEDDINGS is not None:
@@ -797,7 +1022,9 @@ def softmax_confidence(scores: list[float], best_index: int) -> float:
 def get_cached_or_encode_image_embeddings(
     images: list[dict[str, Any]],
     store_root: Path,
+    progress: Any = None,
 ) -> list[list[float]]:
+    global BGE_IMAGE_INFERENCE_STATS
     cache_dir = store_root / "_image-embeddings"
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -817,15 +1044,60 @@ def get_cached_or_encode_image_embeddings(
         else:
             vectors.append(cached_vector)
 
-    if missing_images:
-        encoded = encode_images_with_bge(missing_images)
-        for index, digest, vector in zip(missing_indices, missing_hashes, encoded):
+    inference_seconds = 0.0
+    encoded_so_far = 0
+    chunk_size = max(int(BGE_EMBEDDING_CHUNK_SIZE), 1)
+    chunks = math.ceil(len(missing_images) / chunk_size) if missing_images else 0
+    for chunk_index, start in enumerate(range(0, len(missing_images), chunk_size), start=1):
+        end = min(start + chunk_size, len(missing_images))
+        chunk_images = missing_images[start:end]
+        chunk_indices = missing_indices[start:end]
+        chunk_hashes = missing_hashes[start:end]
+        started_at = time.perf_counter()
+        encoded = encode_images_with_bge(chunk_images)
+        inference_seconds += time.perf_counter() - started_at
+        for index, digest, vector in zip(chunk_indices, chunk_hashes, encoded):
             normalized = [float(value) for value in vector]
             vectors[index] = normalized
             write_cached_image_embedding(cache_dir, digest, normalized)
+        encoded_so_far += len(chunk_images)
+        if progress:
+            progress(
+                {
+                    "totalImages": len(images),
+                    "encodedImages": encoded_so_far,
+                    "cacheHits": len(images) - len(missing_images),
+                    "missingImages": len(missing_images),
+                    "chunkIndex": chunk_index,
+                    "chunks": chunks,
+                }
+            )
 
     if any(vector is None for vector in vectors):
         raise RuntimeError("Image embedding cache produced an incomplete vector list.")
+    encoded_count = len(missing_images)
+    BGE_IMAGE_INFERENCE_STATS = {
+        "totalImages": len(images),
+        "encodedImages": encoded_count,
+        "cacheHits": len(images) - encoded_count,
+        "totalInferenceSeconds": round(inference_seconds, 6),
+        "averageInferenceMsPerImage": round((inference_seconds / encoded_count) * 1000, 3)
+        if encoded_count
+        else 0.0,
+        "batchSize": BGE_BATCH_SIZE,
+        "chunkSize": chunk_size,
+        "chunks": chunks,
+        "device": resolve_bge_device(),
+    }
+    LOGGER.info(
+        "BGE image inference: encoded=%s cache_hits=%s total_seconds=%.6f avg_ms_per_image=%.3f batch_size=%s device=%s",
+        BGE_IMAGE_INFERENCE_STATS["encodedImages"],
+        BGE_IMAGE_INFERENCE_STATS["cacheHits"],
+        BGE_IMAGE_INFERENCE_STATS["totalInferenceSeconds"],
+        BGE_IMAGE_INFERENCE_STATS["averageInferenceMsPerImage"],
+        BGE_IMAGE_INFERENCE_STATS["batchSize"],
+        BGE_IMAGE_INFERENCE_STATS["device"],
+    )
     return [vector for vector in vectors if vector is not None]
 
 
@@ -881,7 +1153,48 @@ def get_bge_model() -> Any:
                 trust_remote_code=True,
                 device=resolve_bge_device(),
             )
+            configure_bge_sentence_transformer(BGE_MODEL)
         return BGE_MODEL
+
+
+def preload_bge_model() -> bool:
+    if not BGE_PRELOAD_ON_STARTUP:
+        LOGGER.info("BGE model preload is disabled by BGE_PRELOAD_ON_STARTUP=0.")
+        return False
+    if not BGE_MODEL_PATH.exists():
+        LOGGER.warning("BGE model preload skipped because model path does not exist: %s", BGE_MODEL_PATH)
+        return False
+    try:
+        model = get_bge_model()
+        LOGGER.info("BGE model preloaded on %s from %s.", getattr(model, "device", resolve_bge_device()), BGE_MODEL_PATH)
+        return True
+    except Exception:
+        LOGGER.exception("BGE model preload failed.")
+        return False
+
+
+def configure_bge_sentence_transformer(model: Any) -> None:
+    """Adapt BGE-VL CLIP modules for sentence-transformers versions that return tensors.
+
+    The local BGE-VL-large config declares `pooler_output` for get_image_features and
+    get_text_features, but those methods return the embedding tensor directly. Newer
+    sentence-transformers versions therefore try to index a 2D tensor with the string
+    `pooler_output`, raising `too many indices for tensor of dimension 2`.
+    """
+    modules = list(model) if hasattr(model, "__iter__") else []
+    if not modules and hasattr(model, "_modules"):
+        modules = list(getattr(model, "_modules").values())
+
+    for module in modules:
+        modality_config = getattr(module, "modality_config", None)
+        if not isinstance(modality_config, dict):
+            continue
+        for params in modality_config.values():
+            if not isinstance(params, dict):
+                continue
+            if params.get("method") in {"get_image_features", "get_text_features"}:
+                if params.get("method_output_name") == "pooler_output":
+                    params["method_output_name"] = None
 
 
 def resolve_bge_device() -> str:
@@ -964,7 +1277,7 @@ def pick_option(key: str, unit: float) -> str:
 def pick_environment(label: str, unit: float) -> str:
     lower = label.lower()
     if any(token in lower for token in ("diaoche", "tuituji", "wajueji", "saturentuiche")):
-        return "road" if unit < 0.35 else "outdoor"
+        return "construction-site" if unit < 0.6 else "urban-street"
     return pick_option("environment", unit)
 
 

@@ -10,12 +10,12 @@ export interface BoundingBox {
   isGroundTruth?: boolean;
 }
 
-export type LightingCondition = 'bright' | 'dim' | 'backlit' | 'low-light' | 'mixed';
-export type Viewpoint = 'front' | 'side' | 'rear' | 'top-down' | 'aerial' | 'wide' | 'close-up';
-export type BlurLevel = 'sharp' | 'slight-blur' | 'motion-blur' | 'out-of-focus';
-export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog' | 'indoor';
+export type LightingCondition = 'bright' | 'moderate' | 'dim';
+export type Viewpoint = 'front' | 'side' | 'rear' | 'overhead';
+export type BlurLevel = 'sharp' | 'motion-blur' | 'out-of-focus';
+export type WeatherCondition = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
 export type TimeOfDay = 'day' | 'dusk' | 'night';
-export type EnvironmentType = 'indoor' | 'outdoor' | 'urban' | 'rural' | 'road' | 'aerial';
+export type EnvironmentType = 'indoor' | 'urban-street' | 'construction-site' | 'rural-field' | 'aerial-scene';
 
 export interface SemanticAttributes {
   lighting: LightingCondition;
@@ -78,6 +78,15 @@ export interface DatasetPayload {
     dimensions: number;
     generatedAt: string;
     message: string;
+    performance?: {
+      totalImages: number;
+      encodedImages: number;
+      cacheHits: number;
+      totalInferenceSeconds: number;
+      averageInferenceMsPerImage: number;
+      batchSize: number;
+      device: string;
+    };
   };
 }
 

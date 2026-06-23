@@ -1,0 +1,10 @@
+{
+  "provider": "bge",
+  "gptVision": {
+    "baseUrl": "http://127.0.0.1:3001/v1",
+    "apiKey": "set-in-backend/semantic_config.local.json-or-env",
+    "model": "gpt-5.5",
+    "timeoutSeconds": 60,
+    "maxImageSize": 768
+  }
+}

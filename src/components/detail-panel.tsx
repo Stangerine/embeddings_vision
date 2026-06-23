@@ -13,8 +13,23 @@ import {
 import { resolveImageSrc } from '@/lib/image-src';
 import type { ColorByMode, SemanticAttributes } from '@/lib/types';
 
+function getSemanticValueLabel(key: keyof SemanticAttributes, value: string): string {
+  return SEMANTIC_VALUE_LABELS[key][value] || value;
+}
+
+function getSemanticColor(key: keyof SemanticAttributes, value: string): string {
+  return SEMANTIC_COLORS[key][value] || '#94a3b8';
+}
+
 export function DetailPanel() {
-  const { selectedImageId, images, selectImage, getFilteredImages, colorByMode } = useGalleryStore();
+  const {
+    selectedImageId,
+    images,
+    selectImage,
+    focusImageInGrid,
+    getFilteredImages,
+    colorByMode,
+  } = useGalleryStore();
 
   const selectedImage = images.find((img) => img.id === selectedImageId);
   const filteredImages = getFilteredImages();
@@ -278,9 +293,9 @@ export function DetailPanel() {
                 <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[#0F172A]">
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: SEMANTIC_COLORS[key][value] }}
+                    style={{ backgroundColor: getSemanticColor(key, value) }}
                   />
-                  {SEMANTIC_VALUE_LABELS[key][value]}
+                  {getSemanticValueLabel(key, value)}
                 </span>
                 {meta && (
                   <span className="mt-0.5 block text-[9px] text-[#94A3B8]">
@@ -350,7 +365,7 @@ export function DetailPanel() {
           {similarImages.map(({ image, distance }) => (
             <button
               key={image.id}
-              onClick={() => selectImage(image.id)}
+              onClick={() => focusImageInGrid(image.id)}
               className="relative group rounded overflow-hidden bg-[#F8FAFC] aspect-square hover:ring-1 hover:ring-[#2563EB] transition-all"
             >
               <img
@@ -480,7 +495,7 @@ function buildOverviewSections({
     title: '时段分布',
     active: colorByMode === 'timeOfDay',
     rows: Object.entries(timeCounts).map(([value, count]) => ({
-      label: SEMANTIC_VALUE_LABELS.timeOfDay[value],
+      label: getSemanticValueLabel('timeOfDay', value),
       count,
       pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
     })),
@@ -490,7 +505,7 @@ function buildOverviewSections({
     title: '环境分布',
     active: colorByMode === 'environment',
     rows: Object.entries(environmentCounts).map(([value, count]) => ({
-      label: SEMANTIC_VALUE_LABELS.environment[value],
+      label: getSemanticValueLabel('environment', value),
       count,
       pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
     })),
@@ -509,7 +524,7 @@ function buildOverviewSections({
         title: `${SEMANTIC_LABELS[activeSemanticKey]}分布`,
         active: true,
         rows: Object.entries(semanticDistribution(activeSemanticKey)).map(([value, count]) => ({
-          label: SEMANTIC_VALUE_LABELS[activeSemanticKey][value],
+          label: getSemanticValueLabel(activeSemanticKey, value),
           count,
           pct: filteredImageCount > 0 ? (count / filteredImageCount) * 100 : 0,
         })),

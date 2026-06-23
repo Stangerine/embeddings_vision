@@ -47,7 +47,7 @@ const payload: DatasetPayload = {
           blur: 'sharp',
           weather: 'clear',
           timeOfDay: 'day',
-          environment: 'road',
+          environment: 'construction-site',
         },
       },
     },
@@ -69,10 +69,10 @@ const payload: DatasetPayload = {
         semantics: {
           lighting: 'dim',
           viewpoint: 'side',
-          blur: 'slight-blur',
-          weather: 'cloudy',
+          blur: 'motion-blur',
+          weather: 'fog',
           timeOfDay: 'night',
-          environment: 'outdoor',
+          environment: 'urban-street',
         },
       },
     },
@@ -87,6 +87,35 @@ test('initial store waits for explicit zip upload before showing dataset images'
   assert.deepEqual(state.images, []);
   assert.deepEqual(state.categories, []);
   assert.equal(state.getFilteredImages().length, 0);
+});
+
+test('loadDataset restores the current cached dataset from the backend', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    assert.equal(String(input), '/api/dataset/current');
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  try {
+    const store = useGalleryStore.getState();
+    await store.loadDataset();
+
+    const state = useGalleryStore.getState();
+    assert.equal(state.datasetInfo.id, 'unit-dataset');
+    assert.equal(state.images.length, 2);
+    assert.equal(state.activeDataset, 'unit-dataset');
+    assert.equal(state.datasetError, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('semantic filter options keep the configured lighting and weather labels', () => {
+  assert.deepEqual(SEMANTIC_OPTIONS.lighting, ['bright', 'moderate', 'dim']);
+  assert.deepEqual(SEMANTIC_OPTIONS.weather, ['clear', 'cloudy', 'rain', 'snow', 'fog']);
 });
 
 test('applyDataset loads backend categories and applies semantic filters', () => {
@@ -113,6 +142,23 @@ test('applyDataset loads backend categories and applies semantic filters', () =>
   );
 });
 
+test('empty semantic dimension is ignored instead of filtering out all images', () => {
+  const store = useGalleryStore.getState();
+  store.applyDataset({
+    ...payload,
+    info: { ...payload.info, id: 'empty-semantic-dimension-dataset' },
+  });
+
+  store.setSemanticFilter('lighting', ['bright']);
+  store.setSemanticFilter('timeOfDay', []);
+
+  const state = useGalleryStore.getState();
+  assert.deepEqual(
+    state.getFilteredImages().map((image) => image.id),
+    ['train-a']
+  );
+});
+
 test('progressive image limit controls how many filtered images are rendered first', () => {
   const store = useGalleryStore.getState();
   store.applyDataset({
@@ -129,5 +175,25 @@ test('progressive image limit controls how many filtered images are rendered fir
 
   state.loadMoreImages();
   state = useGalleryStore.getState();
+  assert.equal(state.getVisibleFilteredImages().length, 2);
+});
+
+test('focusImageInGrid selects an image, switches to grid, and expands visible range', () => {
+  const store = useGalleryStore.getState();
+  store.applyDataset({
+    ...payload,
+    info: { ...payload.info, id: 'focus-dataset' },
+  });
+  store.setSemanticFilter('lighting', [...SEMANTIC_OPTIONS.lighting]);
+  store.setSemanticFilter('timeOfDay', [...SEMANTIC_OPTIONS.timeOfDay]);
+  store.setVisibleImageLimit(1);
+  store.setViewMode('scatter');
+
+  store.focusImageInGrid('validation-b');
+
+  const state = useGalleryStore.getState();
+  assert.equal(state.viewMode, 'grid');
+  assert.equal(state.selectedImageId, 'validation-b');
+  assert.equal(state.gridFocusImageId, 'validation-b');
   assert.equal(state.getVisibleFilteredImages().length, 2);
 });

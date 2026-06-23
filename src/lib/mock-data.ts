@@ -38,12 +38,12 @@ export const SPLIT_SHORT_LABELS: Record<string, string> = {
 };
 
 export const SEMANTIC_OPTIONS: Record<keyof SemanticAttributes, string[]> = {
-  lighting: ['bright', 'dim', 'backlit', 'low-light', 'mixed'],
-  viewpoint: ['front', 'side', 'rear', 'top-down', 'aerial', 'wide', 'close-up'],
-  blur: ['sharp', 'slight-blur', 'motion-blur', 'out-of-focus'],
-  weather: ['clear', 'cloudy', 'rain', 'snow', 'fog', 'indoor'],
+  lighting: ['bright', 'moderate', 'dim'],
+  viewpoint: ['front', 'side', 'rear', 'overhead'],
+  blur: ['sharp', 'motion-blur', 'out-of-focus'],
+  weather: ['clear', 'cloudy', 'rain', 'snow', 'fog'],
   timeOfDay: ['day', 'dusk', 'night'],
-  environment: ['indoor', 'outdoor', 'urban', 'rural', 'road', 'aerial'],
+  environment: ['indoor', 'urban-street', 'construction-site', 'rural-field', 'aerial-scene'],
 };
 
 export const SEMANTIC_LABELS: Record<keyof SemanticAttributes, string> = {
@@ -57,8 +57,12 @@ export const SEMANTIC_LABELS: Record<keyof SemanticAttributes, string> = {
 
 export const SEMANTIC_VALUE_LABELS: Record<keyof SemanticAttributes, Record<string, string>> = {
   lighting: {
+    'front-lit': '正向受光',
+    shadowed: '阴影遮挡',
+    'night-lit': '夜间灯光',
     bright: '明亮',
-    dim: '偏暗',
+    moderate: '适中',
+    dim: '昏暗',
     backlit: '逆光',
     'low-light': '弱光',
     mixed: '混合光',
@@ -67,6 +71,7 @@ export const SEMANTIC_VALUE_LABELS: Record<keyof SemanticAttributes, Record<stri
     front: '正面',
     side: '侧面',
     rear: '背面',
+    overhead: '高位俯视',
     'top-down': '俯视',
     aerial: '航拍',
     wide: '广角',
@@ -84,6 +89,7 @@ export const SEMANTIC_VALUE_LABELS: Record<keyof SemanticAttributes, Record<stri
     rain: '雨天',
     snow: '雪天',
     fog: '雾天',
+    'fog-dust': '雾/扬尘',
     indoor: '室内',
   },
   timeOfDay: {
@@ -98,21 +104,30 @@ export const SEMANTIC_VALUE_LABELS: Record<keyof SemanticAttributes, Record<stri
     rural: '乡村',
     road: '道路',
     aerial: '空中',
+    'urban-street': '城市道路',
+    'construction-site': '施工现场',
+    'rural-field': '郊野场地',
+    'aerial-scene': '航拍场景',
   },
 };
 
 export const SEMANTIC_COLORS: Record<keyof SemanticAttributes, Record<string, string>> = {
   lighting: {
+    'front-lit': '#facc15',
     bright: '#facc15',
+    moderate: '#22c55e',
     dim: '#a78bfa',
     backlit: '#fb7185',
     'low-light': '#60a5fa',
     mixed: '#34d399',
+    shadowed: '#64748b',
+    'night-lit': '#818cf8',
   },
   viewpoint: {
     front: '#22c55e',
     side: '#06b6d4',
     rear: '#f97316',
+    overhead: '#8b5cf6',
     'top-down': '#8b5cf6',
     aerial: '#ec4899',
     wide: '#14b8a6',
@@ -130,6 +145,7 @@ export const SEMANTIC_COLORS: Record<keyof SemanticAttributes, Record<string, st
     rain: '#2563eb',
     snow: '#e2e8f0',
     fog: '#c4b5fd',
+    'fog-dust': '#c4b5fd',
     indoor: '#f472b6',
   },
   timeOfDay: {
@@ -144,6 +160,10 @@ export const SEMANTIC_COLORS: Record<keyof SemanticAttributes, Record<string, st
     rural: '#84cc16',
     road: '#f97316',
     aerial: '#a855f7',
+    'urban-street': '#60a5fa',
+    'construction-site': '#f97316',
+    'rural-field': '#84cc16',
+    'aerial-scene': '#a855f7',
   },
 };
 
@@ -226,10 +246,10 @@ function generateSemantics(source: string, tags: string[], primaryLabel: string)
   const environment = source === 'Indoor-Scene'
     ? 'indoor'
     : source === 'Aerial-View'
-      ? 'aerial'
+      ? 'aerial-scene'
       : primaryLabel === 'car' || primaryLabel === 'truck' || primaryLabel === 'bus' || primaryLabel === 'traffic light'
-        ? pickWeighted([['urban', 4], ['road', 4], ['outdoor', 2]])
-        : pickWeighted([['outdoor', 4], ['urban', 2], ['rural', 2], ['indoor', 1]]);
+        ? pickWeighted([['urban-street', 5], ['construction-site', 3], ['rural-field', 1]])
+        : pickWeighted([['construction-site', 4], ['urban-street', 2], ['rural-field', 2], ['indoor', 1]]);
 
   const timeOfDay = tags.includes('night')
     ? 'night'
@@ -238,29 +258,28 @@ function generateSemantics(source: string, tags: string[], primaryLabel: string)
       : pickWeighted([['day', 7], ['dusk', 2], ['night', 1]]);
 
   const lighting = timeOfDay === 'night'
-    ? pickWeighted([['low-light', 5], ['dim', 3], ['mixed', 2]])
+    ? pickWeighted([['dim', 7], ['moderate', 3]])
     : environment === 'indoor'
-      ? pickWeighted([['dim', 4], ['mixed', 3], ['bright', 2], ['backlit', 1]])
-      : pickWeighted([['bright', 5], ['backlit', 2], ['mixed', 2], ['dim', 1]]);
+      ? pickWeighted([['moderate', 6], ['dim', 3], ['bright', 1]])
+      : pickWeighted([['bright', 5], ['moderate', 4], ['dim', 1]]);
 
-  const viewpoint = environment === 'aerial'
-    ? pickWeighted([['aerial', 6], ['top-down', 3], ['wide', 1]])
+  const viewpoint = environment === 'aerial-scene'
+    ? 'overhead'
     : tags.includes('close-up')
-      ? 'close-up'
+      ? pickWeighted([['front', 3], ['side', 2]])
       : tags.includes('wide-angle')
-        ? 'wide'
-        : pickWeighted([['front', 3], ['side', 3], ['rear', 1], ['wide', 2], ['close-up', 1]]);
+        ? pickWeighted([['front', 3], ['side', 3], ['overhead', 1]])
+        : pickWeighted([['front', 4], ['side', 4], ['rear', 1], ['overhead', 1]]);
 
   const blur = pickWeighted([
     ['sharp', 6],
-    ['slight-blur', 2],
     ['motion-blur', primaryLabel === 'car' || primaryLabel === 'motorcycle' ? 2 : 1],
     ['out-of-focus', 1],
   ]);
 
   const weather = environment === 'indoor'
-    ? 'indoor'
-    : pickWeighted([['clear', 5], ['cloudy', 2], ['rain', 1], ['snow', 0.5], ['fog', 1]]);
+    ? 'clear'
+    : pickWeighted([['clear', 5], ['cloudy', 2], ['rain', 1], ['snow', 0.5], ['fog', 1.5]]);
 
   return {
     lighting,

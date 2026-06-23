@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useGalleryStore } from '@/lib/store';
 import { CATEGORY_COLORS, SPLIT_SHORT_LABELS } from '@/lib/mock-data';
 import { resolveImageSrc } from '@/lib/image-src';
@@ -81,6 +81,7 @@ function ImageCard({ image }: { image: DatasetImage }) {
   return (
     <div
       ref={imgRef}
+      data-image-id={image.id}
       onClick={handleClick}
       className={cn(
         'relative group cursor-pointer rounded-lg overflow-hidden border transition-all duration-150',
@@ -183,11 +184,22 @@ export function GridView() {
     datasetInfo,
     isUploadingDataset,
     loadMoreImages,
+    gridFocusImageId,
   } = useGalleryStore();
   const filteredImages = getFilteredImages();
   const visibleImages = getVisibleFilteredImages();
   const hasDataset = datasetInfo.imageCount > 0;
   const canLoadMore = visibleImages.length < filteredImages.length;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!gridFocusImageId) return;
+    const container = scrollContainerRef.current;
+    const target = container?.querySelector<HTMLElement>(
+      `[data-image-id="${CSS.escape(gridFocusImageId)}"]`
+    );
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [gridFocusImageId, visibleImages.length]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -211,7 +223,7 @@ export function GridView() {
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3">
         {filteredImages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">

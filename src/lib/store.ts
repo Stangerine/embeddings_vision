@@ -49,6 +49,7 @@ interface GalleryState {
   viewMode: ViewMode;
   colorByMode: ColorByMode;
   selectedImageId: string | null;
+  gridFocusImageId: string | null;
   
   // Dataset
   activeDataset: string;
@@ -67,6 +68,7 @@ interface GalleryState {
   setViewMode: (mode: ViewMode) => void;
   setColorByMode: (mode: ColorByMode) => void;
   selectImage: (id: string | null) => void;
+  focusImageInGrid: (id: string) => void;
   setActiveDataset: (id: string) => void;
   setFilters: (filters: Partial<FilterState>) => void;
   toggleCategory: (category: string) => void;
@@ -101,6 +103,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
   viewMode: 'grid',
   colorByMode: 'split',
   selectedImageId: null,
+  gridFocusImageId: null,
   activeDataset: 'empty',
   filters: {
     selectedCategories: [],
@@ -123,6 +126,19 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
   setViewMode: (mode) => set({ viewMode: mode }),
   setColorByMode: (mode) => set({ colorByMode: mode }),
   selectImage: (id) => set({ selectedImageId: id }),
+  focusImageInGrid: (id) =>
+    set((state) => {
+      const filteredIndex = get().getFilteredImages().findIndex((image) => image.id === id);
+      const visibleImageLimit = filteredIndex >= 0
+        ? Math.max(state.visibleImageLimit, filteredIndex + 1)
+        : state.visibleImageLimit;
+      return {
+        selectedImageId: id,
+        gridFocusImageId: id,
+        viewMode: 'grid',
+        visibleImageLimit,
+      };
+    }),
   setActiveDataset: (id) => set({ activeDataset: id }),
   
   setFilters: (partial) =>
@@ -204,6 +220,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         embeddingInfo: payload.embedding,
         activeDataset: payload.info.id,
         selectedImageId: isSameDataset ? state.selectedImageId : null,
+        gridFocusImageId: isSameDataset ? state.gridFocusImageId : null,
         scatterSelection: isSameDataset ? state.scatterSelection : [],
         visibleImageLimit: isSameDataset ? state.visibleImageLimit : INITIAL_VISIBLE_IMAGE_LIMIT,
         datasetError: null,
@@ -284,7 +301,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
 
       // Semantic attribute filters - selected values within the same dimension are OR'ed.
       for (const [key, values] of Object.entries(filters.selectedSemantics)) {
-        if (!values || values.length === 0) return false;
+        if (!values || values.length === 0) continue;
         const semanticKey = key as keyof SemanticAttributes;
         if (!values.includes(img.metadata.semantics[semanticKey])) return false;
       }

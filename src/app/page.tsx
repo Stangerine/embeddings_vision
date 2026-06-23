@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { TopBar } from '@/components/topbar';
 import { Sidebar } from '@/components/sidebar';
 import { GridView } from '@/components/grid-view';
@@ -9,6 +10,11 @@ import { useGalleryStore } from '@/lib/store';
 
 export default function HomePage() {
   const viewMode = useGalleryStore((s) => s.viewMode);
+  const loadDataset = useGalleryStore((s) => s.loadDataset);
+
+  useEffect(() => {
+    void loadDataset();
+  }, [loadDataset]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#F6F8FB] text-[#0F172A] overflow-hidden">

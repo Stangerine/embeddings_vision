@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from backend.dataset_service import DatasetService
+from backend.dataset_service import DatasetService, preload_bge_model
 
 
 app = FastAPI(title="Embeddings Vision Dataset API")
@@ -19,6 +19,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def preload_models() -> None:
+    preload_bge_model()
 
 
 @app.get("/health")
