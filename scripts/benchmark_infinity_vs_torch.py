@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import tempfile
 import time
@@ -43,8 +44,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip"),
-        help="Dataset ZIP path.",
+        default=os.environ.get(
+            "SAMPLE_ZIP_PATH",
+            "E:\\zzq\\误报\\2025-04-01\\sample_split_80_10_10.zip" if os.name == "nt"
+            else "/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip",
+        ),
     )
     parser.add_argument(
         "--model-path",
@@ -320,6 +324,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     args = parse_args()
+    args.dataset = Path(args.dataset)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     LOGGER.info(f"Starting benchmark: {args.dataset}")

@@ -17,12 +17,14 @@ const handle = app.getRequestHandler();
 let pythonProcess: ChildProcessWithoutNullStreams | null = null;
 
 function startPythonBackend() {
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
   pythonProcess = spawn(
-    'python3',
+    pythonCmd,
     ['-m', 'uvicorn', 'backend.app:app', '--host', pythonHost, '--port', String(pythonApiPort)],
     {
       cwd: process.cwd(),
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      shell: process.platform === 'win32',
     }
   );
 
@@ -41,7 +43,19 @@ function startPythonBackend() {
 
 function stopPythonBackend() {
   if (pythonProcess && !pythonProcess.killed) {
-    pythonProcess.kill('SIGTERM');
+    if (process.platform === 'win32') {
+      // On Windows, kill the process tree via taskkill
+      try {
+        spawn('taskkill', ['/pid', String(pythonProcess.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          shell: false,
+        });
+      } catch {
+        pythonProcess.kill();
+      }
+    } else {
+      pythonProcess.kill('SIGTERM');
+    }
   }
 }
 

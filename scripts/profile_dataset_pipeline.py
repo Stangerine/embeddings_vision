@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -40,7 +41,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip"),
+        default=os.environ.get(
+            "SAMPLE_ZIP_PATH",
+            "E:\\zzq\\误报\\2025-04-01\\sample_split_80_10_10.zip" if os.name == "nt"
+            else "/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip",
+        ),
     )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -180,6 +185,7 @@ def profile_pipeline(dataset_zip: Path, device: str, batch_size: int) -> dict[st
 
 def main() -> None:
     args = parse_args()
+    args.dataset = Path(args.dataset)
     if not args.dataset.exists():
         raise FileNotFoundError(args.dataset)
 

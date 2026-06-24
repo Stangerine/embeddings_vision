@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import tempfile
 import time
@@ -44,8 +45,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip"),
-        help="Dataset ZIP path.",
+        default=os.environ.get(
+            "SAMPLE_ZIP_PATH",
+            "E:\\zzq\\误报\\2025-04-01\\sample_split_80_10_10.zip" if os.name == "nt"
+            else "/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip",
+        ),
     )
     parser.add_argument(
         "--model-path",
@@ -166,27 +170,24 @@ def encode_infinity(
     engine: Any,
     image_paths: list[Path],
     batch_size: int,
+    loop: asyncio.AbstractEventLoop,
 ) -> tuple[np.ndarray, float]:
     """Encode images using Infinity Embedding engine."""
 
-    async def _encode() -> tuple[np.ndarray, float]:
-        # Load images as bytes
-        image_bytes_list = []
-        for path in image_paths:
-            with open(path, "rb") as f:
-                image_bytes_list.append(f.read())
+    # Load images as bytes
+    image_bytes_list = []
+    for path in image_paths:
+        with open(path, "rb") as f:
+            image_bytes_list.append(f.read())
 
+    async def _encode() -> tuple[np.ndarray, float]:
         started_at = time.perf_counter()
         embeddings, usage = await engine.image_embed(images=image_bytes_list)
         elapsed = time.perf_counter() - started_at
 
         return np.array(embeddings), elapsed
 
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(_encode())
-    finally:
-        loop.close()
+    return loop.run_until_complete(_encode())
 
 
 def cosine_similarity_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -260,11 +261,11 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
 
     infinity_engine = load_infinity_engine(args.model_path, args.device, args.batch_size)
 
-    # Start engine
-    async def start_engine():
-        await infinity_engine.astart()
+    # Use a single event loop for all infinity operations
+    loop = asyncio.new_event_loop()
 
-    asyncio.new_event_loop().run_until_complete(start_engine())
+    # Start engine
+    loop.run_until_complete(infinity_engine.astart())
 
     # Warmup
     for i in range(args.warmup):
@@ -273,6 +274,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             infinity_engine,
             image_paths[: args.batch_size],
             args.batch_size,
+            loop,
         )
 
     # Benchmark
@@ -280,6 +282,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         infinity_engine,
         image_paths,
         args.batch_size,
+        loop,
     )
 
     results["infinity"] = {
@@ -291,10 +294,8 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     LOGGER.info(f"Infinity: {infinity_seconds:.3f}s, {results['infinity']['msPerImage']:.1f}ms/image")
 
     # Stop engine
-    async def stop_engine():
-        await infinity_engine.astop()
-
-    asyncio.new_event_loop().run_until_complete(stop_engine())
+    loop.run_until_complete(infinity_engine.astop())
+    loop.close()
 
     # === Comparison ===
     LOGGER.info("=" * 60)
@@ -334,6 +335,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     args = parse_args()
+    args.dataset = Path(args.dataset)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     LOGGER.info(f"Starting benchmark: {args.dataset}")

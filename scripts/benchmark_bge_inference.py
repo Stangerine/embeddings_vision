@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import tempfile
 import time
 import sys
@@ -24,8 +25,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip"),
-        help="Dataset ZIP path.",
+        default=os.environ.get(
+            "SAMPLE_ZIP_PATH",
+            "E:\\zzq\\误报\\2025-04-01\\sample_split_80_10_10.zip" if os.name == "nt"
+            else "/home/shao/zzq/误报/2025-04-01/sample_split_80_10_10.zip",
+        ),
     )
     parser.add_argument("--device", default="cuda:0", help="BGE device, for example cuda:0 or cpu.")
     parser.add_argument("--batches", default="1,4,8,16", help="Comma separated BGE batch sizes to test.")
@@ -98,6 +102,7 @@ def run_batch(dataset_zip: Path, device: str, batch_size: int) -> dict[str, Any]
 def main() -> None:
     args = parse_args()
     batches = [int(value.strip()) for value in args.batches.split(",") if value.strip()]
+    args.dataset = Path(args.dataset)
     if not args.dataset.exists():
         raise FileNotFoundError(args.dataset)
 

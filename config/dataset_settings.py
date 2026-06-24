@@ -5,6 +5,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _default_model_path() -> str:
+    """Cross-platform default for BGE-VL-large model weights.
+
+    Linux: /home/shao/zzq/model/BGE-VL-large
+    Windows: E:/zzq/model/BGE-VL-large (mapped from /home/shao/zzq)
+    """
+    if os.name == "nt":
+        return "E:\\zzq\\model\\BGE-VL-large"
+    return "/home/shao/zzq/model/BGE-VL-large"
+
+
 def env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -14,12 +25,15 @@ def env_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class BgeSettings:
-    model_path: Path = Path(os.environ.get("BGE_VL_MODEL_PATH", "/home/shao/zzq/model/BGE-VL-large"))
+    model_path: Path = Path(os.environ.get("BGE_VL_MODEL_PATH", _default_model_path()))
     batch_size: int = int(os.environ.get("BGE_BATCH_SIZE", "16"))
     embedding_chunk_size: int = int(os.environ.get("BGE_EMBEDDING_CHUNK_SIZE", "256"))
     device: str | None = os.environ.get("BGE_DEVICE")
     enabled: bool = env_bool("BGE_VL_ENABLE", True)
     preload_on_startup: bool = env_bool("BGE_PRELOAD_ON_STARTUP", True)
+    use_infinity: bool = env_bool("BGE_USE_INFINITY", True)
+    infinity_batch_size: int = int(os.environ.get("BGE_INFINITY_BATCH_SIZE", "64"))
+    infinity_concurrency: int = int(os.environ.get("BGE_INFINITY_CONCURRENCY", "4"))
 
 
 @dataclass(frozen=True)

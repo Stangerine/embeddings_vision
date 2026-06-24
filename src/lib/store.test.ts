@@ -18,7 +18,7 @@ const payload: DatasetPayload = {
   categoryCounts: { diaoche: 1, wajueji: 1 },
   embedding: {
     model: 'bge-vl-large',
-    modelPath: '/home/shao/zzq/model/BGE-VL-large',
+    modelPath: '/mock/model/BGE-VL-large',
     status: 'ready',
     method: 'test',
     dimensions: 2,

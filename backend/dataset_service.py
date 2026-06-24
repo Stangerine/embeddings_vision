@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import base64
 import io
@@ -49,6 +50,9 @@ SEMANTIC_CONFIG_PATH = SEMANTIC_RUNTIME_SETTINGS.config_path
 IMAGE_EXTENSIONS = DATASET_SETTINGS.image_extensions
 BGE_MODEL = None
 BGE_MODEL_LOCK = threading.Lock()
+INFINITY_ENGINE = None
+INFINITY_ENGINE_LOOP = None
+INFINITY_ENGINE_LOCK = threading.Lock()
 SEMANTIC_TEXT_EMBEDDINGS = None
 SEMANTIC_TEXT_EMBEDDINGS_LOCK = threading.Lock()
 SEMANTIC_CONFIG = None
@@ -669,7 +673,7 @@ def apply_embedding_projection(
             return images, {
                 "status": "ready",
                 "method": "BGE-VL-large image embeddings + PCA",
-                "message": "已使用 /home/shao/zzq/model/BGE-VL-large 生成图像 embedding，复用单图缓存后通过 PCA 降到二维用于向量分布展示。",
+                "message": f"已使用 {BGE_SETTINGS.model_path} 生成图像 embedding，复用单图缓存后通过 PCA 降到二维用于向量分布展示。",
                 "dimensions": str(len(embeddings[0]) if embeddings else 0),
                 "performance": BGE_IMAGE_INFERENCE_STATS or {},
             }
@@ -727,6 +731,8 @@ def add_absolute_paths(images: list[dict[str, Any]], dataset_root: Path) -> list
 
 
 def encode_images_with_bge(images: list[dict[str, Any]]) -> list[list[float]]:
+    if BGE_SETTINGS.use_infinity:
+        return encode_images_with_infinity(images)
     model = get_bge_model()
     image_paths = [image["_absolutePath"] for image in images]
     encoded = model.encode(image_paths, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
@@ -734,6 +740,8 @@ def encode_images_with_bge(images: list[dict[str, Any]]) -> list[list[float]]:
 
 
 def encode_texts_with_bge(prompts: list[str]) -> list[list[float]]:
+    if BGE_SETTINGS.use_infinity:
+        return encode_texts_with_infinity(prompts)
     model = get_bge_model()
     encoded = model.encode(prompts, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
     return encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
@@ -1048,30 +1056,70 @@ def get_cached_or_encode_image_embeddings(
     encoded_so_far = 0
     chunk_size = max(int(BGE_EMBEDDING_CHUNK_SIZE), 1)
     chunks = math.ceil(len(missing_images) / chunk_size) if missing_images else 0
+    concurrency = BGE_SETTINGS.infinity_concurrency if BGE_SETTINGS.use_infinity else 1
+
+    # Build chunk specs
+    chunk_specs: list[tuple[int, list, list[int], list[str]]] = []
     for chunk_index, start in enumerate(range(0, len(missing_images), chunk_size), start=1):
         end = min(start + chunk_size, len(missing_images))
-        chunk_images = missing_images[start:end]
-        chunk_indices = missing_indices[start:end]
-        chunk_hashes = missing_hashes[start:end]
-        started_at = time.perf_counter()
-        encoded = encode_images_with_bge(chunk_images)
-        inference_seconds += time.perf_counter() - started_at
-        for index, digest, vector in zip(chunk_indices, chunk_hashes, encoded):
+        chunk_specs.append((
+            chunk_index,
+            missing_images[start:end],
+            missing_indices[start:end],
+            missing_hashes[start:end],
+        ))
+
+    def _process_chunk_result(indices: list[int], hashes: list[str], encoded: list[list[float]]) -> None:
+        nonlocal encoded_so_far
+        for idx, digest, vector in zip(indices, hashes, encoded):
             normalized = [float(value) for value in vector]
-            vectors[index] = normalized
+            vectors[idx] = normalized
             write_cached_image_embedding(cache_dir, digest, normalized)
-        encoded_so_far += len(chunk_images)
+        encoded_so_far += len(indices)
+
+    def _report_progress(chunk_index: int) -> None:
         if progress:
-            progress(
-                {
-                    "totalImages": len(images),
-                    "encodedImages": encoded_so_far,
-                    "cacheHits": len(images) - len(missing_images),
-                    "missingImages": len(missing_images),
-                    "chunkIndex": chunk_index,
-                    "chunks": chunks,
-                }
-            )
+            progress({
+                "totalImages": len(images),
+                "encodedImages": encoded_so_far,
+                "cacheHits": len(images) - len(missing_images),
+                "missingImages": len(missing_images),
+                "chunkIndex": chunk_index,
+                "chunks": chunks,
+            })
+
+    if concurrency > 1 and len(chunk_specs) > 1 and BGE_SETTINGS.use_infinity:
+        # Parallel chunk processing via thread pool.
+        # Each thread calls encode_images_with_bge (respecting test mocks)
+        # which internally does loop.run_until_complete on its own thread.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        max_workers = min(concurrency, len(chunk_specs))
+        LOGGER.info("Parallel chunk encoding: %d chunks, concurrency=%d", len(chunk_specs), max_workers)
+
+        def _encode_chunk(spec):
+            chunk_index, chunk_imgs, indices, hashes = spec
+            started = time.perf_counter()
+            encoded = encode_images_with_bge(chunk_imgs)
+            elapsed = time.perf_counter() - started
+            return chunk_index, indices, hashes, encoded, elapsed
+
+        started_at = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_encode_chunk, spec): spec[0] for spec in chunk_specs}
+            for future in as_completed(futures):
+                chunk_index, indices, hashes, encoded, _ = future.result()
+                _process_chunk_result(indices, hashes, encoded)
+                _report_progress(chunk_index)
+        inference_seconds += time.perf_counter() - started_at
+    else:
+        # Sequential processing (sentence-transformers or concurrency=1)
+        for chunk_index, chunk_images, chunk_indices, chunk_hashes in chunk_specs:
+            started_at = time.perf_counter()
+            encoded = encode_images_with_bge(chunk_images)
+            inference_seconds += time.perf_counter() - started_at
+            _process_chunk_result(chunk_indices, chunk_hashes, encoded)
+            _report_progress(chunk_index)
 
     if any(vector is None for vector in vectors):
         raise RuntimeError("Image embedding cache produced an incomplete vector list.")
@@ -1157,6 +1205,66 @@ def get_bge_model() -> Any:
         return BGE_MODEL
 
 
+def get_infinity_engine() -> Any:
+    global INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+    if INFINITY_ENGINE is not None:
+        return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+
+    with INFINITY_ENGINE_LOCK:
+        if INFINITY_ENGINE is not None:
+            return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+
+        import asyncio
+        from infinity_emb import AsyncEmbeddingEngine, EngineArgs
+
+        loop = asyncio.new_event_loop()
+        engine = AsyncEmbeddingEngine.from_args(
+            EngineArgs(
+                model_name_or_path=str(BGE_MODEL_PATH),
+                engine="torch",
+                device=resolve_bge_device(),
+                bettertransformer=True,
+                model_warmup=False,
+                batch_size=BGE_SETTINGS.infinity_batch_size,
+            )
+        )
+        loop.run_until_complete(engine.astart())
+
+        # Run the event loop in a daemon thread so
+        # run_coroutine_threadsafe() works from any thread.
+        loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
+        loop_thread.start()
+
+        INFINITY_ENGINE = engine
+        INFINITY_ENGINE_LOOP = loop
+        LOGGER.info(
+            "Infinity engine started on %s from %s (batch_size=%d, concurrency=%d).",
+            resolve_bge_device(), BGE_MODEL_PATH,
+            BGE_SETTINGS.infinity_batch_size,
+            BGE_SETTINGS.infinity_concurrency,
+        )
+        return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+
+
+def _infinity_submit(loop: Any, coro: Any) -> Any:
+    """Thread-safe coroutine submission to the shared Infinity event loop."""
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result()
+
+
+def encode_images_with_infinity(images: list[dict[str, Any]]) -> list[list[float]]:
+    engine, loop = get_infinity_engine()
+    image_bytes_list = [Path(p["_absolutePath"]).read_bytes() for p in images]
+    embeddings, _ = _infinity_submit(loop, engine.image_embed(images=image_bytes_list))
+    return [list(vec) for vec in embeddings]
+
+
+def encode_texts_with_infinity(prompts: list[str]) -> list[list[float]]:
+    engine, loop = get_infinity_engine()
+    embeddings, _ = _infinity_submit(loop, engine.embed(sentences=prompts))
+    return [list(vec) for vec in embeddings]
+
+
 def preload_bge_model() -> bool:
     if not BGE_PRELOAD_ON_STARTUP:
         LOGGER.info("BGE model preload is disabled by BGE_PRELOAD_ON_STARTUP=0.")
@@ -1165,8 +1273,12 @@ def preload_bge_model() -> bool:
         LOGGER.warning("BGE model preload skipped because model path does not exist: %s", BGE_MODEL_PATH)
         return False
     try:
-        model = get_bge_model()
-        LOGGER.info("BGE model preloaded on %s from %s.", getattr(model, "device", resolve_bge_device()), BGE_MODEL_PATH)
+        if BGE_SETTINGS.use_infinity:
+            engine, _ = get_infinity_engine()
+            LOGGER.info("Infinity embedding engine preloaded on %s from %s.", resolve_bge_device(), BGE_MODEL_PATH)
+        else:
+            model = get_bge_model()
+            LOGGER.info("BGE model preloaded on %s from %s.", getattr(model, "device", resolve_bge_device()), BGE_MODEL_PATH)
         return True
     except Exception:
         LOGGER.exception("BGE model preload failed.")
