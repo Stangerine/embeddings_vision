@@ -1,6 +1,7 @@
-"""Benchmark: Infinity batch_size=64/concurrency=4 vs batch_size=32/concurrency=1."""
+"""Benchmark: Infinity engine pool (batch=64, conc=4) vs single engine (batch=32, conc=1)."""
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import sys
@@ -32,22 +33,37 @@ def extract_images(zip_path: Path, max_count: int = 100) -> tuple[list[dict], Pa
     return images, tmpdir
 
 
-def run_bench(images: list[dict], batch_size: int, concurrency: int, runs: int = 1):
-    """Start a fresh Infinity engine and benchmark."""
-    # Reset engine globals so a new one is created with new settings
+def stop_all_engines():
+    """Stop all engines in the pool."""
     import backend.dataset_service as ds
-    ds.INFINITY_ENGINE = None
-    ds.INFINITY_ENGINE_LOOP = None
+    for engine, loop in ds.INFINITY_ENGINES:
+        try:
+            future = asyncio.run_coroutine_threadsafe(engine.astop(), loop)
+            future.result(timeout=10)
+            loop.call_soon_threadsafe(loop.stop)
+        except Exception:
+            pass
+    time.sleep(0.5)
+    ds.INFINITY_ENGINES = []
+
+
+def run_bench(images: list[dict], batch_size: int, concurrency: int, runs: int = 1):
+    """Start fresh Infinity engines and benchmark."""
+    import backend.dataset_service as ds
+
+    # Stop existing engines
+    stop_all_engines()
 
     # Override settings
     from config import dataset_settings
-    object.__setattr__(dataset_settings.BGE_SETTINGS, "infinity_batch_size", batch_size)
+    object.__setattr__(dataset_settings.BGE_SETTINGS, "batch_size", batch_size)
     object.__setattr__(dataset_settings.BGE_SETTINGS, "infinity_concurrency", concurrency)
     object.__setattr__(dataset_settings.BGE_SETTINGS, "use_infinity", True)
 
-    # Warmup
-    print(f"  Loading engine (batch_size={batch_size}, concurrency={concurrency})...")
-    ds.get_infinity_engine()
+    # Warmup — creates the engine pool
+    print(f"  Loading {concurrency} engine(s) (batch_size={batch_size})...")
+    engines = ds.get_infinity_engines()
+    print(f"  Pool ready: {len(engines)} engine(s)")
 
     times = []
     for i in range(runs):
@@ -72,24 +88,25 @@ def main():
     try:
         print(f"Benchmark: {len(images)} images × {runs} runs each\n")
 
-        # Config A: batch=32, concurrency=1 (baseline)
-        print("[A] batch_size=32, concurrency=1")
+        # Config A: single engine, batch=32 (baseline)
+        print("[A] 1 engine, batch_size=32")
         avg_a, _ = run_bench(images, batch_size=32, concurrency=1, runs=runs)
         print(f"  Average: {avg_a:.3f}s\n")
 
-        # Config B: batch=64, concurrency=4
-        print("[B] batch_size=64, concurrency=4")
+        # Config B: engine pool, batch=64, 4 engines
+        print("[B] 4 engines, batch_size=64")
         avg_b, _ = run_bench(images, batch_size=64, concurrency=4, runs=runs)
         print(f"  Average: {avg_b:.3f}s\n")
 
         print("=" * 50)
-        print(f"[A] batch=32, conc=1:  {avg_a:.3f}s")
-        print(f"[B] batch=64, conc=4:  {avg_b:.3f}s")
+        print(f"[A] 1 engine,  batch=32: {avg_a:.3f}s")
+        print(f"[B] 4 engines, batch=64: {avg_b:.3f}s")
         if avg_b > 0:
             speedup = avg_a / avg_b
             print(f"Speedup: {speedup:.2f}x")
 
     finally:
+        stop_all_engines()
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 

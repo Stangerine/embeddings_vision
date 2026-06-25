@@ -26,13 +26,12 @@ def env_bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class BgeSettings:
     model_path: Path = Path(os.environ.get("BGE_VL_MODEL_PATH", _default_model_path()))
-    batch_size: int = int(os.environ.get("BGE_BATCH_SIZE", "16"))
+    batch_size: int = int(os.environ.get("BGE_BATCH_SIZE", "64"))
     embedding_chunk_size: int = int(os.environ.get("BGE_EMBEDDING_CHUNK_SIZE", "256"))
     device: str | None = os.environ.get("BGE_DEVICE")
     enabled: bool = env_bool("BGE_VL_ENABLE", True)
     preload_on_startup: bool = env_bool("BGE_PRELOAD_ON_STARTUP", True)
     use_infinity: bool = env_bool("BGE_USE_INFINITY", True)
-    infinity_batch_size: int = int(os.environ.get("BGE_INFINITY_BATCH_SIZE", "64"))
     infinity_concurrency: int = int(os.environ.get("BGE_INFINITY_CONCURRENCY", "4"))
 
 
@@ -41,6 +40,7 @@ class DatasetSettings:
     store_root: Path = Path(os.environ.get("DATASET_STORE_ROOT", ".dataset-store")).resolve()
     image_extensions: frozenset[str] = frozenset({".jpg", ".jpeg", ".png", ".webp", ".bmp"})
     split_names: tuple[str, ...] = ("train", "val", "validation", "test")
+    milvus_db_path: str = os.environ.get("MILVUS_DB_PATH", ".milvus-data.db")
 
 
 @dataclass(frozen=True)

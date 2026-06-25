@@ -119,6 +119,7 @@ pids
 *.seed
 *.pid.lock
 .dataset-store/
+.milvus-data.db
 .model-cache/
 backend/semantic_config.local.json
 # Diagnostic reports

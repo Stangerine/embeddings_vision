@@ -50,10 +50,12 @@ SEMANTIC_CONFIG_PATH = SEMANTIC_RUNTIME_SETTINGS.config_path
 IMAGE_EXTENSIONS = DATASET_SETTINGS.image_extensions
 BGE_MODEL = None
 BGE_MODEL_LOCK = threading.Lock()
-INFINITY_ENGINE = None
-INFINITY_ENGINE_LOOP = None
-INFINITY_ENGINE_LOCK = threading.Lock()
+INFINITY_ENGINES: list[tuple[Any, Any]] = []  # [(engine, loop), ...]
+INFINITY_ENGINES_LOCK = threading.Lock()
+INFINITY_ENGINE_IDX = 0  # round-robin counter
 SEMANTIC_TEXT_EMBEDDINGS = None
+MILVUS_STORE = None
+MILVUS_STORE_LOCK = threading.Lock()
 SEMANTIC_TEXT_EMBEDDINGS_LOCK = threading.Lock()
 SEMANTIC_CONFIG = None
 SEMANTIC_CONFIG_LOCK = threading.Lock()
@@ -70,12 +72,13 @@ class SplitRoot:
 
 
 class DatasetService:
-    def __init__(self, store_root: Path = STORE_ROOT, enable_bge: bool | None = None) -> None:
+    def __init__(self, store_root: Path = STORE_ROOT, enable_bge: bool | None = None, milvus_store: Any = None) -> None:
         self.store_root = store_root
         self.enable_bge = BGE_SETTINGS.enabled if enable_bge is None else enable_bge
         self.embedding_delay_seconds = 0.0
         self._job_lock = threading.Lock()
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._milvus_store = milvus_store
         self.store_root.mkdir(parents=True, exist_ok=True)
 
     def current_dataset(self) -> dict[str, Any]:
@@ -512,20 +515,27 @@ class DatasetService:
             raise FileNotFoundError(str(candidate))
         return candidate
 
+    def _get_store(self) -> Any:
+        return self._milvus_store or get_milvus_store()
+
     def _read_dataset(self, dataset_id: str) -> dict[str, Any] | None:
-        metadata_path = self.store_root / sanitize_id(dataset_id) / "dataset.json"
-        if not metadata_path.exists():
+        store = self._get_store()
+        payload = store.load_dataset(dataset_id)
+        if payload is None:
             return None
-        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+        images = store.load_images(dataset_id)
+        payload["images"] = images
+        payload["info"]["imageCount"] = len(images)
+        payload["info"]["annotationCount"] = sum(
+            len(img.get("detections", [])) for img in images
+        )
         return payload if is_semantic_cache_valid(payload) else None
 
     def _write_dataset(self, dataset_id: str, payload: dict[str, Any]) -> None:
-        metadata_dir = self.store_root / sanitize_id(dataset_id)
-        metadata_dir.mkdir(parents=True, exist_ok=True)
-        (metadata_dir / "dataset.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        store = self._get_store()
+        store.save_dataset(dataset_id, payload)
+        if payload.get("images"):
+            store.save_images(dataset_id, payload["images"])
 
     def _safe_extract_zip(self, zip_path: Path, out_dir: Path) -> None:
         with zipfile.ZipFile(zip_path) as archive:
@@ -730,9 +740,9 @@ def add_absolute_paths(images: list[dict[str, Any]], dataset_root: Path) -> list
     return restored
 
 
-def encode_images_with_bge(images: list[dict[str, Any]]) -> list[list[float]]:
+def encode_images_with_bge(images: list[dict[str, Any]], engine_idx: int | None = None) -> list[list[float]]:
     if BGE_SETTINGS.use_infinity:
-        return encode_images_with_infinity(images)
+        return encode_images_with_infinity(images, engine_idx=engine_idx)
     model = get_bge_model()
     image_paths = [image["_absolutePath"] for image in images]
     encoded = model.encode(image_paths, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
@@ -1033,8 +1043,6 @@ def get_cached_or_encode_image_embeddings(
     progress: Any = None,
 ) -> list[list[float]]:
     global BGE_IMAGE_INFERENCE_STATS
-    cache_dir = store_root / "_image-embeddings"
-    cache_dir.mkdir(parents=True, exist_ok=True)
 
     vectors: list[list[float] | None] = []
     missing_images: list[dict[str, Any]] = []
@@ -1043,7 +1051,7 @@ def get_cached_or_encode_image_embeddings(
 
     for index, image in enumerate(images):
         digest = hash_file(Path(image["_absolutePath"]))
-        cached_vector = read_cached_image_embedding(cache_dir, digest)
+        cached_vector = read_cached_image_embedding(digest)
         if cached_vector is None:
             vectors.append(None)
             missing_images.append(image)
@@ -1074,7 +1082,7 @@ def get_cached_or_encode_image_embeddings(
         for idx, digest, vector in zip(indices, hashes, encoded):
             normalized = [float(value) for value in vector]
             vectors[idx] = normalized
-            write_cached_image_embedding(cache_dir, digest, normalized)
+            write_cached_image_embedding(digest, normalized)
         encoded_so_far += len(indices)
 
     def _report_progress(chunk_index: int) -> None:
@@ -1089,24 +1097,26 @@ def get_cached_or_encode_image_embeddings(
             })
 
     if concurrency > 1 and len(chunk_specs) > 1 and BGE_SETTINGS.use_infinity:
-        # Parallel chunk processing via thread pool.
-        # Each thread calls encode_images_with_bge (respecting test mocks)
-        # which internally does loop.run_until_complete on its own thread.
+        # Parallel chunk processing: each chunk gets its own engine.
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        max_workers = min(concurrency, len(chunk_specs))
-        LOGGER.info("Parallel chunk encoding: %d chunks, concurrency=%d", len(chunk_specs), max_workers)
+        engines = get_infinity_engines()
+        max_workers = min(len(engines), len(chunk_specs))
+        LOGGER.info("Parallel chunk encoding: %d chunks across %d engines", len(chunk_specs), max_workers)
 
-        def _encode_chunk(spec):
+        def _encode_chunk(spec, worker_idx):
             chunk_index, chunk_imgs, indices, hashes = spec
             started = time.perf_counter()
-            encoded = encode_images_with_bge(chunk_imgs)
+            encoded = encode_images_with_bge(chunk_imgs, engine_idx=worker_idx)
             elapsed = time.perf_counter() - started
             return chunk_index, indices, hashes, encoded, elapsed
 
         started_at = time.perf_counter()
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_encode_chunk, spec): spec[0] for spec in chunk_specs}
+            futures = {
+                pool.submit(_encode_chunk, spec, idx % max_workers): spec[0]
+                for idx, spec in enumerate(chunk_specs)
+            }
             for future in as_completed(futures):
                 chunk_index, indices, hashes, encoded, _ = future.result()
                 _process_chunk_result(indices, hashes, encoded)
@@ -1149,16 +1159,27 @@ def get_cached_or_encode_image_embeddings(
     return [vector for vector in vectors if vector is not None]
 
 
-def read_cached_image_embedding(cache_dir: Path, digest: str) -> list[float] | None:
-    path = cache_dir / f"{digest}.npy"
-    if not path.exists():
-        return None
-    array = np.load(path)
-    return array.astype(np.float32).tolist()
+_MILVUS_STORE_OVERRIDE: Any = None
 
 
-def write_cached_image_embedding(cache_dir: Path, digest: str, vector: list[float]) -> None:
-    np.save(cache_dir / f"{digest}.npy", np.asarray(vector, dtype=np.float32))
+def set_milvus_store_override(store: Any) -> None:
+    """Override the global Milvus store (for testing)."""
+    global _MILVUS_STORE_OVERRIDE
+    _MILVUS_STORE_OVERRIDE = store
+
+
+def _get_active_store() -> Any:
+    return _MILVUS_STORE_OVERRIDE or get_milvus_store()
+
+
+def read_cached_image_embedding(digest: str) -> list[float] | None:
+    store = _get_active_store()
+    return store.get_cached_embedding(digest)
+
+
+def write_cached_image_embedding(digest: str, vector: list[float]) -> None:
+    store = _get_active_store()
+    store.cache_embedding(digest, vector)
 
 
 def persist_dataset_embeddings(
@@ -1167,13 +1188,10 @@ def persist_dataset_embeddings(
     images: list[dict[str, Any]],
     embeddings: list[list[float]],
 ) -> None:
-    embedding_dir = store_root / sanitize_id(dataset_id) / "embeddings"
-    embedding_dir.mkdir(parents=True, exist_ok=True)
-    np.save(embedding_dir / "image_embeddings.npy", np.asarray(embeddings, dtype=np.float32))
-    (embedding_dir / "image_ids.json").write_text(
-        json.dumps([image["id"] for image in images], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    store = _get_active_store()
+    image_ids = [img["id"] for img in images]
+    embeddings_2d = [img.get("embedding2d", [0.0, 0.0]) for img in images]
+    store.update_embeddings(dataset_id, image_ids, embeddings, embeddings_2d)
 
 
 def hash_file(path: Path) -> str:
@@ -1182,6 +1200,19 @@ def hash_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def get_milvus_store() -> Any:
+    """Get or create the global MilvusStore singleton."""
+    global MILVUS_STORE
+    if MILVUS_STORE is not None:
+        return MILVUS_STORE
+    with MILVUS_STORE_LOCK:
+        if MILVUS_STORE is None:
+            from backend.milvus_store import MilvusStore
+            db_path = str(STORE_ROOT.parent / DATASET_SETTINGS.milvus_db_path)
+            MILVUS_STORE = MilvusStore(db_path)
+        return MILVUS_STORE
 
 
 def get_bge_model() -> Any:
@@ -1205,19 +1236,16 @@ def get_bge_model() -> Any:
         return BGE_MODEL
 
 
-def get_infinity_engine() -> Any:
-    global INFINITY_ENGINE, INFINITY_ENGINE_LOOP
-    if INFINITY_ENGINE is not None:
-        return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+def _create_single_engine() -> tuple[Any, Any]:
+    """Create one Infinity engine with its own event loop in a daemon thread."""
+    import asyncio
+    from infinity_emb import AsyncEmbeddingEngine, EngineArgs
 
-    with INFINITY_ENGINE_LOCK:
-        if INFINITY_ENGINE is not None:
-            return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+    result: list[Any] = []
 
-        import asyncio
-        from infinity_emb import AsyncEmbeddingEngine, EngineArgs
-
+    def _init():
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         engine = AsyncEmbeddingEngine.from_args(
             EngineArgs(
                 model_name_or_path=str(BGE_MODEL_PATH),
@@ -1225,35 +1253,62 @@ def get_infinity_engine() -> Any:
                 device=resolve_bge_device(),
                 bettertransformer=True,
                 model_warmup=False,
-                batch_size=BGE_SETTINGS.infinity_batch_size,
+                batch_size=BGE_SETTINGS.batch_size,
             )
         )
         loop.run_until_complete(engine.astart())
+        thread = threading.Thread(target=loop.run_forever, daemon=True)
+        thread.start()
+        result.extend([engine, loop])
 
-        # Run the event loop in a daemon thread so
-        # run_coroutine_threadsafe() works from any thread.
-        loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
-        loop_thread.start()
+    # Run in a temporary thread to avoid "event loop already running" error
+    # when called from within uvicorn's async context.
+    init_thread = threading.Thread(target=_init)
+    init_thread.start()
+    init_thread.join()
+    return result[0], result[1]
 
-        INFINITY_ENGINE = engine
-        INFINITY_ENGINE_LOOP = loop
-        LOGGER.info(
-            "Infinity engine started on %s from %s (batch_size=%d, concurrency=%d).",
-            resolve_bge_device(), BGE_MODEL_PATH,
-            BGE_SETTINGS.infinity_batch_size,
-            BGE_SETTINGS.infinity_concurrency,
-        )
-        return INFINITY_ENGINE, INFINITY_ENGINE_LOOP
+
+def get_infinity_engines() -> list[tuple[Any, Any]]:
+    """Lazily initialize a pool of independent Infinity engines."""
+    global INFINITY_ENGINES
+    if INFINITY_ENGINES:
+        return INFINITY_ENGINES
+
+    with INFINITY_ENGINES_LOCK:
+        if INFINITY_ENGINES:
+            return INFINITY_ENGINES
+
+        pool_size = max(BGE_SETTINGS.infinity_concurrency, 1)
+        LOGGER.info("Initializing Infinity engine pool: %d workers on %s", pool_size, resolve_bge_device())
+        engines = []
+        for i in range(pool_size):
+            engine, loop = _create_single_engine()
+            engines.append((engine, loop))
+            LOGGER.info("  Engine %d/%d ready (batch_size=%d)", i + 1, pool_size, BGE_SETTINGS.batch_size)
+
+        INFINITY_ENGINES = engines
+        return INFINITY_ENGINES
+
+
+def get_infinity_engine() -> tuple[Any, Any]:
+    """Get a single engine (for single-threaded callers)."""
+    engines = get_infinity_engines()
+    return engines[0]
 
 
 def _infinity_submit(loop: Any, coro: Any) -> Any:
-    """Thread-safe coroutine submission to the shared Infinity event loop."""
+    """Thread-safe coroutine submission to a specific event loop."""
     future = asyncio.run_coroutine_threadsafe(coro, loop)
     return future.result()
 
 
-def encode_images_with_infinity(images: list[dict[str, Any]]) -> list[list[float]]:
-    engine, loop = get_infinity_engine()
+def encode_images_with_infinity(images: list[dict[str, Any]], engine_idx: int | None = None) -> list[list[float]]:
+    engines = get_infinity_engines()
+    if engine_idx is not None:
+        engine, loop = engines[engine_idx % len(engines)]
+    else:
+        engine, loop = engines[0]
     image_bytes_list = [Path(p["_absolutePath"]).read_bytes() for p in images]
     embeddings, _ = _infinity_submit(loop, engine.image_embed(images=image_bytes_list))
     return [list(vec) for vec in embeddings]
@@ -1274,8 +1329,8 @@ def preload_bge_model() -> bool:
         return False
     try:
         if BGE_SETTINGS.use_infinity:
-            engine, _ = get_infinity_engine()
-            LOGGER.info("Infinity embedding engine preloaded on %s from %s.", resolve_bge_device(), BGE_MODEL_PATH)
+            engines = get_infinity_engines()
+            LOGGER.info("Infinity engine pool preloaded: %d engines on %s from %s.", len(engines), resolve_bge_device(), BGE_MODEL_PATH)
         else:
             model = get_bge_model()
             LOGGER.info("BGE model preloaded on %s from %s.", getattr(model, "device", resolve_bge_device()), BGE_MODEL_PATH)
