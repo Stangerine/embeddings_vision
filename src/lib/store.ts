@@ -232,7 +232,17 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
           selectedSplits: isSameDataset
             ? state.filters.selectedSplits
             : ['train', 'validation', 'test'],
-          selectedSemantics: state.filters.selectedSemantics,
+          selectedSemantics: isSameDataset
+            ? state.filters.selectedSemantics
+            : {
+                lighting: [...SEMANTIC_OPTIONS.lighting],
+                viewpoint: [...SEMANTIC_OPTIONS.viewpoint],
+                blur: [...SEMANTIC_OPTIONS.blur],
+                weather: [...SEMANTIC_OPTIONS.weather],
+                timeOfDay: [...SEMANTIC_OPTIONS.timeOfDay],
+                environment: [...SEMANTIC_OPTIONS.environment],
+              },
+          searchQuery: isSameDataset ? state.filters.searchQuery : '',
         },
       };
     }),
@@ -289,12 +299,14 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       // Split filter
       if (!filters.selectedSplits.includes(img.split)) return false;
       
-      // Category filter - image must have at least one detection with selected category
+      // Category filter - if image has detections, at least one must match
       if (filters.selectedCategories.length === 0) return false;
-      const hasSelectedCategory = img.detections.some((det) =>
-        filters.selectedCategories.includes(det.label)
-      );
-      if (!hasSelectedCategory) return false;
+      if (img.detections.length > 0) {
+        const hasSelectedCategory = img.detections.some((det) =>
+          filters.selectedCategories.includes(det.label)
+        );
+        if (!hasSelectedCategory) return false;
+      }
       
       // Scatter selection filter
       if (scatterSelection.length > 0 && !scatterSelection.includes(img.id)) return false;

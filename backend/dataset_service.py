@@ -165,11 +165,15 @@ class DatasetService:
             content_hash=content_hash,
         )
 
-    def start_upload_job(self, filename: str, content: bytes) -> dict[str, Any]:
+    def start_upload_job(
+        self,
+        filename: str,
+        zip_path: Path,
+        content_hash: str,
+    ) -> dict[str, Any]:
         if not filename.lower().endswith(".zip"):
             raise ValueError("Only .zip datasets are supported.")
 
-        content_hash = hashlib.sha256(content).hexdigest()
         cached = self._read_cached_hash(content_hash)
         if cached is not None:
             self._write_dataset("current", cached)
@@ -185,13 +189,14 @@ class DatasetService:
                 "error": None,
             }
             self._set_job(job_id, completed)
+            zip_path.unlink(missing_ok=True)
             return completed
 
         job_id = sanitize_id(f"job-{int(datetime.now().timestamp() * 1000)}-{content_hash[:8]}")
         incoming_dir = self.store_root / "_incoming" / job_id
         incoming_dir.mkdir(parents=True, exist_ok=True)
         upload_path = incoming_dir / "dataset.zip"
-        upload_path.write_bytes(content)
+        shutil.move(str(zip_path), str(upload_path))
         job = {
             "jobId": job_id,
             "status": "queued",

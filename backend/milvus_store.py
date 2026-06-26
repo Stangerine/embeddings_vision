@@ -130,6 +130,13 @@ class MilvusStore:
             client.create_collection(collection_name="embedding_cache", schema=schema)
             LOGGER.info("Created Milvus collection: embedding_cache")
 
+        # Load all collections into memory for querying
+        for name in ("datasets", "images", "embedding_cache"):
+            try:
+                client.load_collection(name)
+            except Exception:
+                pass
+
     # ------------------------------------------------------------------
     # Dataset operations
     # ------------------------------------------------------------------
@@ -165,6 +172,7 @@ class MilvusStore:
         # Upsert: delete then insert
         client.delete("datasets", ids=[dataset_id])
         client.insert("datasets", [row])
+        client.load_collection("datasets")
         LOGGER.debug("Saved dataset %s to Milvus", dataset_id)
 
     def load_dataset(self, dataset_id: str) -> dict[str, Any] | None:
@@ -256,6 +264,7 @@ class MilvusStore:
             # Delete existing images for this dataset first
             client.delete("images", filter=f'dataset_id == "{dataset_id}"')
             client.insert("images", rows)
+            client.load_collection("images")
             LOGGER.debug("Saved %d images for dataset %s", len(rows), dataset_id)
 
     def load_images(self, dataset_id: str) -> list[dict[str, Any]]:
@@ -301,6 +310,7 @@ class MilvusStore:
                 "embedding": _pad_vector(emb),
                 "embedding_2d": [float(v) for v in emb2d],
             }])
+        client.load_collection("images")
         LOGGER.debug("Updated embeddings for %d images in %s", len(image_ids), dataset_id)
 
     # ------------------------------------------------------------------
@@ -320,6 +330,7 @@ class MilvusStore:
             "file_hash": file_hash,
             "embedding": _pad_vector(embedding),
         }])
+        client.load_collection("embedding_cache")
 
     def batch_get_cached_embeddings(self, file_hashes: list[str]) -> dict[str, list[float]]:
         """Batch lookup embeddings by file hash. Returns {hash: vector}."""
@@ -340,6 +351,7 @@ class MilvusStore:
         client = self._get_client()
         rows = [{"file_hash": h, "embedding": _pad_vector(emb)} for h, emb in items.items()]
         client.upsert("embedding_cache", rows)
+        client.load_collection("embedding_cache")
 
     # ------------------------------------------------------------------
     # Vector search (new capability)

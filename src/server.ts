@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { parse } from 'url';
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'child_process';
 import { Readable } from 'stream';
 import next from 'next';
 
@@ -44,11 +44,11 @@ function startPythonBackend() {
 function stopPythonBackend() {
   if (pythonProcess && !pythonProcess.killed) {
     if (process.platform === 'win32') {
-      // On Windows, kill the process tree via taskkill
+      // On Windows, kill the process tree via taskkill (sync
+      // so it completes before Node exits)
       try {
-        spawn('taskkill', ['/pid', String(pythonProcess.pid), '/T', '/F'], {
+        spawnSync('taskkill', ['/pid', String(pythonProcess.pid), '/T', '/F'], {
           stdio: 'ignore',
-          shell: false,
         });
       } catch {
         pythonProcess.kill();
@@ -130,4 +130,9 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   stopPythonBackend();
   process.exit(0);
+});
+// Fallback: exit fires reliably on all platforms, including
+// Windows when SIGINT is not delivered to the handler.
+process.on('exit', () => {
+  stopPythonBackend();
 });

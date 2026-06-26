@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -8,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from backend.dataset_service import DatasetService, preload_bge_model
+
+STREAM_CHUNK_SIZE = 1024 * 1024  # 1 MiB
 
 
 app = FastAPI(title="Embeddings Vision Dataset API")
@@ -44,9 +48,24 @@ def current_dataset() -> dict:
 @app.post("/api/dataset/upload")
 async def upload_dataset(request: Request) -> dict:
     try:
-        content = await request.body()
         filename = unquote(request.headers.get("x-filename", "dataset.zip"))
-        return service.start_upload_job(filename, content)
+        hasher = hashlib.sha256()
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".zip", delete=False,
+        )
+        try:
+            async for chunk in request.stream():
+                tmp.write(chunk)
+                hasher.update(chunk)
+            tmp.close()
+            content_hash = hasher.hexdigest()
+            return service.start_upload_job(
+                filename, Path(tmp.name), content_hash,
+            )
+        except BaseException:
+            tmp.close()
+            Path(tmp.name).unlink(missing_ok=True)
+            raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

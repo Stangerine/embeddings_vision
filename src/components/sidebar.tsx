@@ -21,24 +21,28 @@ export function Sidebar() {
     categories,
     toggleSemanticFilter,
     setSemanticFilter,
+    getFilteredImages,
   } = useGalleryStore();
 
   const allSplits = ['train', 'validation', 'test'] as const;
 
-  // Count annotations per category
+  // Use filtered images for counts so sidebar matches grid display
+  const filteredImages = getFilteredImages();
+
+  // Count annotations per category (from filtered images)
   const categoryCounts: Record<string, number> = {};
-  for (const img of images) {
+  for (const img of filteredImages) {
     for (const det of img.detections) {
       categoryCounts[det.label] = (categoryCounts[det.label] || 0) + 1;
     }
   }
 
-  const splitCounts = images.reduce<Record<string, number>>((counts, img) => {
+  const splitCounts = filteredImages.reduce<Record<string, number>>((counts, img) => {
     counts[img.split] = (counts[img.split] || 0) + 1;
     return counts;
   }, {});
 
-  // Count images by semantic attribute.
+  // Count images by semantic attribute (from filtered images).
   const semanticCounts: Record<keyof SemanticAttributes, Record<string, number>> = {
     lighting: {},
     viewpoint: {},
@@ -47,7 +51,7 @@ export function Sidebar() {
     timeOfDay: {},
     environment: {},
   };
-  for (const img of images) {
+  for (const img of filteredImages) {
     for (const key of Object.keys(semanticCounts) as (keyof SemanticAttributes)[]) {
       const value = img.metadata.semantics[key];
       semanticCounts[key][value] = (semanticCounts[key][value] || 0) + 1;

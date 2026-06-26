@@ -16,7 +16,7 @@ function BBoxOverlay({ detections, width, height }: {
     <svg
       className="absolute inset-0 w-full h-full pointer-events-none"
       viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
     >
       {detections.map((det) => {
         const [x, y, w, h] = det.bbox;
@@ -75,9 +75,6 @@ function ImageCard({ image }: { image: DatasetImage }) {
     selectImage(isSelected ? null : image.id);
   }, [isSelected, image.id, selectImage]);
 
-  // Aspect ratio for the card
-  const aspectRatio = image.width / image.height;
-
   return (
     <div
       ref={imgRef}
@@ -90,11 +87,8 @@ function ImageCard({ image }: { image: DatasetImage }) {
           : 'border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-lg'
       )}
     >
-      {/* Image container with fixed aspect ratio */}
-      <div
-        className="relative bg-[#F8FAFC] overflow-hidden"
-        style={{ aspectRatio: aspectRatio }}
-      >
+      {/* Image container */}
+      <div className="relative bg-[#F8FAFC]">
         {/* Placeholder with gradient based on primary category */}
         <div
           className="absolute inset-0"
@@ -102,12 +96,12 @@ function ImageCard({ image }: { image: DatasetImage }) {
             background: `linear-gradient(135deg, ${CATEGORY_COLORS[image.detections[0]?.label] || '#2563EB'}15, ${CATEGORY_COLORS[image.detections[0]?.label] || '#2563EB'}05)`,
           }}
         />
-        
-        {/* Image */}
+
+        {/* Image - natural size, no cropping */}
         <img
-          src={resolveImageSrc(image, 400, Math.round(400 / aspectRatio))}
+          src={resolveImageSrc(image, 400, 300)}
           alt={image.filename}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="block w-full h-auto"
           loading="lazy"
         />
 
