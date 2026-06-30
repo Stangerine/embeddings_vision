@@ -2,7 +2,15 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http';
 import { parse } from 'url';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'child_process';
 import { Readable } from 'stream';
-import next from 'next';
+import type { Socket } from 'net';
+// Next does not type this internal entrypoint, but it is the same module
+// `next dev` uses to mount the dev HMR websocket. The public
+// `next().getUpgradeHandler()` resolves to NextServer.handleUpgrade, which is
+// an empty no-op in this version, so the HMR socket never attaches and the
+// browser falls back to full page reloads. router-server.initialize() returns
+// an upgradeHandler that correctly routes /_next/webpack-hmr to the bundler.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { initialize } = require('next/dist/server/lib/router-server');
 
 const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || 'localhost';
@@ -11,20 +19,25 @@ const pythonApiPort = parseInt(process.env.PYTHON_API_PORT || String(port + 1), 
 const pythonHost = process.env.PYTHON_API_HOST || '127.0.0.1';
 const pythonApiUrl = `http://${pythonHost}:${pythonApiPort}`;
 
-// Create Next.js app
-const app = next({ dev, hostname, port });
-const handle = app.getRequestHandler();
+type NextHandlers = {
+  requestHandler: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+  upgradeHandler: (req: IncomingMessage, socket: Socket, head: Buffer) => Promise<void>;
+};
+
 let pythonProcess: ChildProcessWithoutNullStreams | null = null;
 
 function startPythonBackend() {
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  // On Windows, spawn python directly (no shell) so we get the real PID.
+  // shell:true made the stored PID point at cmd.exe instead of python.exe,
+  // which broke taskkill. On Unix, python3 is standard.
+  const pythonCmd = process.platform === 'win32' ? 'python.exe' : 'python3';
   pythonProcess = spawn(
     pythonCmd,
     ['-m', 'uvicorn', 'backend.app:app', '--host', pythonHost, '--port', String(pythonApiPort)],
     {
       cwd: process.cwd(),
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
-      shell: process.platform === 'win32',
+      // No shell — direct spawn gives us the real python PID
     }
   );
 
@@ -93,23 +106,41 @@ async function proxyToPython(req: IncomingMessage, res: ServerResponse) {
   res.end();
 }
 
-app.prepare().then(() => {
-  startPythonBackend();
+async function main() {
+  // Create our own http server so we keep full control over the Python proxy.
+  // router-server.initialize() needs the server instance: in dev it attaches
+  // the HMR bundler to it and returns an upgradeHandler that drives the
+  // /_next/webpack-hmr websocket — the piece that next().getUpgradeHandler()
+  // does not wire up in a custom server.
   const server = createServer(async (req, res) => {
     try {
       if (req.url?.startsWith('/api/dataset/')) {
         await proxyToPython(req, res);
         return;
       }
-      const parsedUrl = parse(req.url!, true);
-      await handle(req, res, parsedUrl);
+      await handlers.requestHandler(req, res);
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
       res.statusCode = 500;
       res.end('Internal server error');
     }
   });
-  server.once('error', err => {
+
+  const handlers = (await initialize({
+    dir: process.cwd(),
+    port,
+    hostname,
+    dev,
+    minimalMode: false,
+    server,
+    keepAliveTimeout: undefined,
+    customServer: true,
+  })) as NextHandlers;
+
+  server.on('upgrade', (req, socket, head) => {
+    void handlers.upgradeHandler(req, socket as Socket, head);
+  });
+  server.once('error', (err) => {
     console.error(err);
     process.exit(1);
   });
@@ -121,7 +152,7 @@ app.prepare().then(() => {
     );
     console.log(`> Python dataset API proxied from ${pythonApiUrl}`);
   });
-});
+}
 
 process.on('SIGINT', () => {
   stopPythonBackend();
@@ -131,8 +162,29 @@ process.on('SIGTERM', () => {
   stopPythonBackend();
   process.exit(0);
 });
-// Fallback: exit fires reliably on all platforms, including
-// Windows when SIGINT is not delivered to the handler.
-process.on('exit', () => {
+
+// On Windows, tsx watch may forcefully kill this process before signal
+// handlers fire. stdin closing is the most reliable "parent died" signal:
+// when the terminal/tsx goes away, stdin emits 'end'. This works even
+// when SIGINT/SIGTERM handlers are skipped.
+process.stdin.on('end', () => {
   stopPythonBackend();
 });
+
+// Final safety net: kill anything already on the Python port.
+// This runs on every start and catches orphans from previous crashed runs.
+function killPort(port: number) {
+  if (process.platform !== 'win32') return;
+  try {
+    spawnSync('cmd', ['/c', `for /f "tokens=5" %a in ('netstat -ano ^| findstr :${port}') do taskkill /F /PID %a`], {
+      stdio: 'ignore',
+      timeout: 3000,
+    });
+  } catch { /* best-effort */ }
+}
+
+// Clean up any orphan from a previous crashed session before starting
+killPort(pythonApiPort);
+startPythonBackend();
+
+void main();

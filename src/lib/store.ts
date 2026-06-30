@@ -8,6 +8,7 @@ import type {
   DatasetPayload,
   DatasetUploadJob,
   SemanticAttributes,
+  CleaningSuggestions,
 } from './types';
 import { fetchCurrentDataset, fetchUploadJob, uploadDatasetZip } from './dataset-api';
 import {
@@ -40,6 +41,7 @@ interface GalleryState {
   categories: string[];
   categoryCounts: Record<string, number>;
   embeddingInfo: DatasetPayload['embedding'] | null;
+  cleaning: CleaningSuggestions | null;
   isLoadingDataset: boolean;
   isUploadingDataset: boolean;
   uploadJob: DatasetUploadJob | null;
@@ -96,6 +98,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
   categories: [],
   categoryCounts: {},
   embeddingInfo: null,
+  cleaning: null,
   isLoadingDataset: false,
   isUploadingDataset: false,
   uploadJob: null,
@@ -218,6 +221,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         categories: payload.categories,
         categoryCounts: payload.categoryCounts,
         embeddingInfo: payload.embedding,
+        cleaning: payload.cleaning ?? null,
         activeDataset: payload.info.id,
         selectedImageId: isSameDataset ? state.selectedImageId : null,
         gridFocusImageId: isSameDataset ? state.gridFocusImageId : null,
@@ -248,7 +252,14 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
     }),
 
   loadDataset: async () => {
-    set({ isLoadingDataset: true, datasetError: null });
+    // Skip setting the loading spinner when images are already loaded.
+    // React StrictMode double-mounts components in dev, which would
+    // otherwise flash "loading..." → data → "loading..." → data,
+    // looking like an auto-refresh.
+    const { images } = get();
+    if (images.length === 0) {
+      set({ isLoadingDataset: true, datasetError: null });
+    }
     try {
       const payload = await fetchCurrentDataset();
       get().applyDataset(payload);

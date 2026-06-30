@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,7 @@ from PIL import Image
 
 from config.dataset_settings import (
     BGE_SETTINGS,
+    CLEANING_SETTINGS,
     DATASET_SETTINGS,
     SEMANTIC_OPTIONS,
     SEMANTIC_PROMPTS,
@@ -69,6 +71,52 @@ SEMANTIC_SCHEMA_VERSION = SEMANTIC_RUNTIME_SETTINGS.schema_version
 class SplitRoot:
     split: str
     path: Path
+
+
+def _parse_single_image(
+    image_path: Path,
+    split_name: str,
+    label_dir: Path,
+    xml_dir: Path,
+    dataset_dir: Path,
+    dataset_id: str,
+    display_name: str,
+) -> dict[str, Any]:
+    """Parse a single image — stateless helper for parallel I/O-bound parsing.
+
+    Reads image dimensions, Pascal-VOC or YOLO annotations, derives
+    placeholder semantics. Caller fills in 2D embedding afterwards.
+    """
+    stem = image_path.stem
+    width, height = read_image_size(image_path)
+    xml_path = xml_dir / f"{stem}.xml"
+    label_path = label_dir / f"{stem}.txt"
+    detections = (
+        parse_pascal_voc(xml_path, width, height)
+        if xml_path.exists()
+        else parse_yolo_label(label_path)
+    )
+    primary_label = detections[0]["label"] if detections else "unknown"
+    semantics = derive_placeholder_semantics(stem, primary_label, split_name)
+    tags = sorted({split_name, primary_label, *semantics.values()})
+    relative_path = image_path.relative_to(dataset_dir).as_posix()
+    return {
+        "id": f"{split_name}-{stem}",
+        "_absolutePath": str(image_path),
+        "filepath": make_image_url(dataset_id, relative_path),
+        "filename": image_path.name,
+        "width": width,
+        "height": height,
+        "split": split_name,
+        "detections": detections,
+        "embedding2d": [0.0, 0.0],
+        "metadata": {
+            "source": display_name,
+            "captureDate": infer_capture_date(stem),
+            "tags": tags,
+            "semantics": semantics,
+        },
+    }
 
 
 class DatasetService:
@@ -120,6 +168,7 @@ class DatasetService:
         extract_dir.mkdir(parents=True, exist_ok=True)
 
         archive_path = archive_dir / "dataset.zip"
+        # The caller still owns zip_path (e.g. a test fixture), so copy.
         shutil.copy2(zip_path, archive_path)
         if progress:
             progress("extracting", 20, "正在解压 ZIP 数据集")
@@ -316,7 +365,8 @@ class DatasetService:
         extract_dir.mkdir(parents=True, exist_ok=True)
 
         archive_path = archive_dir / "dataset.zip"
-        shutil.copy2(zip_path, archive_path)
+        # Move instead of copy — avoids a redundant full-file copy.
+        shutil.move(str(zip_path), str(archive_path))
         if progress:
             progress("extracting", 20, "正在解压 ZIP 数据集")
         self._safe_extract_zip(archive_path, extract_dir)
@@ -350,7 +400,7 @@ class DatasetService:
         if progress:
             progress("embedding", 75, "正在生成 BGE embedding 并计算二维向量分布")
         images = add_absolute_paths(payload["images"], dataset_root)
-        images, embedding_meta = apply_embedding_projection(
+        images, embedding_meta, embeddings = apply_embedding_projection(
             images,
             self.enable_bge,
             store_root=self.store_root,
@@ -359,10 +409,19 @@ class DatasetService:
         )
         for image in images:
             image.pop("_absolutePath", None)
+        # Precompute cleaning suggestions from high-dim embeddings. Runs after
+        # the embedding/2D projection so it never blocks the image grid or
+        # scatter visualization (which are shown in the earlier job stage).
+        cleaning = None
+        if embeddings is not None:
+            if progress:
+                progress("embedding", 95, "正在分析离群样本与重复图片")
+            cleaning = compute_cleaning(images, embeddings)
         payload = {
             **payload,
             "images": images,
             "embedding": build_embedding_info(embedding_meta),
+            "cleaning": cleaning,
         }
         self._write_dataset(dataset_id, payload)
         if make_current and dataset_id != "current":
@@ -383,50 +442,44 @@ class DatasetService:
     ) -> dict[str, Any]:
         dataset_dir = dataset_dir.resolve()
         split_roots = discover_split_roots(dataset_dir)
-        images: list[dict[str, Any]] = []
+        split_order = {sr.split: i for i, sr in enumerate(split_roots)}
 
+        # Collect every (image_path, split_name, label_dir, xml_dir) task.
+        tasks: list[tuple[Path, str, Path, Path]] = []
         for split_root in split_roots:
             image_dir = split_root.path / "images"
             label_dir = split_root.path / "labels"
             xml_dir = split_root.path / "xml"
             for image_path in sorted(list_image_files(image_dir)):
-                stem = image_path.stem
-                width, height = read_image_size(image_path)
-                xml_path = xml_dir / f"{stem}.xml"
-                label_path = label_dir / f"{stem}.txt"
-                detections = (
-                    parse_pascal_voc(xml_path, width, height)
-                    if xml_path.exists()
-                    else parse_yolo_label(label_path)
+                tasks.append((image_path, split_root.split, label_dir, xml_dir))
+
+        images: list[dict[str, Any]] = []
+        if tasks:
+            # I/O-bound: reading image sizes and XML / YOLO annotations.
+            max_workers = min(32, max(1, (os.cpu_count() or 4) * 2))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_map = {
+                    executor.submit(
+                        _parse_single_image,
+                        image_path, split_name, label_dir, xml_dir,
+                        dataset_dir, dataset_id, display_name,
+                    ): image_path
+                    for image_path, split_name, label_dir, xml_dir in tasks
+                }
+                for future in as_completed(future_map):
+                    images.append(future.result())
+            # Restore deterministic order (same as the old serial loop).
+            images.sort(
+                key=lambda img: (
+                    split_order.get(img["split"], 999),
+                    img["filename"],
                 )
-                primary_label = detections[0]["label"] if detections else "unknown"
-                semantics = derive_placeholder_semantics(stem, primary_label, split_root.split)
-                tags = sorted({split_root.split, primary_label, *semantics.values()})
-                relative_path = image_path.relative_to(dataset_dir).as_posix()
-                images.append(
-                    {
-                        "id": f"{split_root.split}-{stem}",
-                        "_absolutePath": str(image_path),
-                        "filepath": make_image_url(dataset_id, relative_path),
-                        "filename": image_path.name,
-                        "width": width,
-                        "height": height,
-                        "split": split_root.split,
-                        "detections": detections,
-                        "embedding2d": [0.0, 0.0],
-                        "metadata": {
-                            "source": display_name,
-                            "captureDate": infer_capture_date(stem),
-                            "tags": tags,
-                            "semantics": semantics,
-                        },
-                    }
-                )
+            )
 
         if include_embedding:
             if progress:
                 progress("embedding", 70, "正在生成 BGE embedding 并计算二维向量分布")
-            images, embedding_meta = apply_embedding_projection(
+            images, embedding_meta, _ = apply_embedding_projection(
                 images,
                 self.enable_bge,
                 store_root=self.store_root,
@@ -534,6 +587,18 @@ class DatasetService:
         payload["info"]["annotationCount"] = sum(
             len(img.get("detections", [])) for img in images
         )
+        # Cleaning JSON can exceed Milvus VARCHAR limit (65535) for large
+        # datasets, so it is stored as a plain file, not in the KV store.
+        cleaning_path = self.store_root / dataset_id / "cleaning.json"
+        if cleaning_path.exists():
+            try:
+                payload["cleaning"] = json.loads(
+                    cleaning_path.read_text(encoding="utf-8")
+                )
+            except (json.JSONDecodeError, OSError):
+                payload["cleaning"] = None
+        else:
+            payload["cleaning"] = None
         return payload if is_semantic_cache_valid(payload) else None
 
     def _write_dataset(self, dataset_id: str, payload: dict[str, Any]) -> None:
@@ -541,6 +606,14 @@ class DatasetService:
         store.save_dataset(dataset_id, payload)
         if payload.get("images"):
             store.save_images(dataset_id, payload["images"])
+        cleaning = payload.get("cleaning")
+        if cleaning is not None:
+            cleaning_path = self.store_root / dataset_id / "cleaning.json"
+            cleaning_path.parent.mkdir(parents=True, exist_ok=True)
+            cleaning_path.write_text(
+                json.dumps(cleaning, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
     def _safe_extract_zip(self, zip_path: Path, out_dir: Path) -> None:
         with zipfile.ZipFile(zip_path) as archive:
@@ -675,7 +748,12 @@ def apply_embedding_projection(
     store_root: Path = STORE_ROOT,
     dataset_id: str | None = None,
     progress: Any = None,
-) -> tuple[list[dict[str, Any]], dict[str, str]]:
+) -> tuple[list[dict[str, Any]], dict[str, str], list[list[float]] | None]:
+    """Returns (images, embedding_meta, embeddings_or_none).
+
+    embeddings is the raw high-dim vector list when status is "ready",
+    otherwise None (fallback / disabled path).
+    """
     if enable_bge and BGE_MODEL_PATH.exists() and images:
         try:
             embeddings = get_cached_or_encode_image_embeddings(images, store_root, progress=progress)
@@ -691,7 +769,7 @@ def apply_embedding_projection(
                 "message": f"已使用 {BGE_SETTINGS.model_path} 生成图像 embedding，复用单图缓存后通过 PCA 降到二维用于向量分布展示。",
                 "dimensions": str(len(embeddings[0]) if embeddings else 0),
                 "performance": BGE_IMAGE_INFERENCE_STATS or {},
-            }
+            }, [list(e) for e in embeddings]
         except Exception as exc:
             images = apply_feature_projection(images)
             return images, {
@@ -699,7 +777,7 @@ def apply_embedding_projection(
                 "method": "deterministic feature projection",
                 "message": f"BGE-VL-large 推理失败，已回退到图片尺寸、类别和标注几何特征投影：{exc}",
                 "dimensions": "2",
-            }
+            }, None
 
     images = apply_feature_projection(images)
     return images, {
@@ -707,7 +785,7 @@ def apply_embedding_projection(
         "method": "deterministic feature projection",
         "message": "未启用 BGE-VL-large 推理，二维可视化坐标使用图片尺寸、类别和标注几何特征生成。",
         "dimensions": "2",
-    }
+    }, None
 
 
 def build_embedding_info(embedding_meta: dict[str, str]) -> dict[str, Any]:
@@ -1108,6 +1186,7 @@ def get_cached_or_encode_image_embeddings(
         engines = get_infinity_engines()
         max_workers = min(len(engines), len(chunk_specs))
         LOGGER.info("Parallel chunk encoding: %d chunks across %d engines", len(chunk_specs), max_workers)
+        parallel_failed = False
 
         def _encode_chunk(spec, worker_idx):
             chunk_index, chunk_imgs, indices, hashes = spec
@@ -1123,10 +1202,38 @@ def get_cached_or_encode_image_embeddings(
                 for idx, spec in enumerate(chunk_specs)
             }
             for future in as_completed(futures):
-                chunk_index, indices, hashes, encoded, _ = future.result()
+                try:
+                    chunk_index, indices, hashes, encoded, _ = future.result(timeout=900)
+                except Exception:
+                    LOGGER.exception("Parallel chunk encoding failed, will retry remaining chunks sequentially")
+                    parallel_failed = True
+                    # Cancel remaining pending futures to free resources.
+                    for f in futures:
+                        f.cancel()
+                    break
                 _process_chunk_result(indices, hashes, encoded)
                 _report_progress(chunk_index)
-        inference_seconds += time.perf_counter() - started_at
+
+        if not parallel_failed:
+            inference_seconds += time.perf_counter() - started_at
+        else:
+            # Fall back to sequential sentence-transformers for chunks that
+            # haven't been processed yet (vectors[idx] is still None).
+            LOGGER.warning("Falling back to sequential sentence-transformers encoding")
+            remaining = [
+                (ci, ci_imgs, ci_indices, ci_hashes)
+                for ci, ci_imgs, ci_indices, ci_hashes in chunk_specs
+                if any(vectors[idx] is None for idx in ci_indices)
+            ]
+            for chunk_index, chunk_images, chunk_indices, chunk_hashes in remaining:
+                started_at = time.perf_counter()
+                model = get_bge_model()
+                image_paths = [img["_absolutePath"] for img in chunk_images]
+                encoded = model.encode(image_paths, batch_size=BGE_BATCH_SIZE, show_progress_bar=False)
+                encoded_list = encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
+                inference_seconds += time.perf_counter() - started_at
+                _process_chunk_result(chunk_indices, chunk_hashes, encoded_list)
+                _report_progress(chunk_index)
     else:
         # Sequential processing (sentence-transformers or concurrency=1)
         for chunk_index, chunk_images, chunk_indices, chunk_hashes in chunk_specs:
@@ -1197,6 +1304,96 @@ def persist_dataset_embeddings(
     image_ids = [img["id"] for img in images]
     embeddings_2d = [img.get("embedding2d", [0.0, 0.0]) for img in images]
     store.update_embeddings(dataset_id, image_ids, embeddings, embeddings_2d)
+
+
+def compute_cleaning(
+    images: list[dict[str, Any]],
+    embeddings: list[list[float]],
+) -> dict[str, Any]:
+    """Precompute cleaning suggestions from high-dimensional embeddings.
+
+    Duplicates: images whose mutual nearest neighbour (each is the other's most
+    similar image) exceeds dup_threshold. This reports the *images* involved in
+    near-duplicate relationships rather than an exploding count of pairs, which
+    stays meaningful even when the embedding space is very dense. Outliers:
+    largest average cosine distance to the k nearest neighbours, flagging the
+    furthest (1 - outlier_percentile) fraction. Results are capped to keep the
+    frontend overlay responsive.
+
+    Note: builds the full n x n similarity matrix. Fine for the current
+    prototype scale (<= ~8k images, ~250MB float32). For larger datasets this
+    should be chunked.
+    """
+    n = len(images)
+    empty: dict[str, Any] = {"outliers": [], "duplicates": []}
+    if n < 2 or len(embeddings) != n:
+        return empty
+
+    matrix = np.asarray(embeddings, dtype=np.float32)
+    if matrix.ndim != 2 or matrix.shape[0] != n:
+        return empty
+
+    # L2-normalize rows so dot product == cosine similarity.
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    matrix = matrix / norms
+
+    sim = matrix @ matrix.T
+    np.clip(sim, -1.0, 1.0, out=sim)
+
+    settings = CLEANING_SETTINGS
+    ids = [img["id"] for img in images]
+
+    # Dynamic caps scaled to dataset size (0 = auto, explicit value = override).
+    max_dups = settings.max_pairs if settings.max_pairs > 0 else max(50, int(n * 0.30))
+    max_out = settings.max_outliers if settings.max_outliers > 0 else max(50, int(n * 0.15))
+
+    # --- Duplicates: mutual nearest-neighbour images ---
+    # For each row, the nearest neighbour is the highest similarity excluding
+    # self. An image is a duplicate when it and its nearest neighbour point at
+    # each other (mutual) and their similarity clears the threshold. We report
+    # the set of images that participate in such a relationship (deduplicated),
+    # not the pair count.
+    sim_no_self = sim.copy()
+    np.fill_diagonal(sim_no_self, -np.inf)
+    nn = np.argmax(sim_no_self, axis=1)
+    nn_sim = sim_no_self[np.arange(n), nn]
+    mutual = (nn[nn] == np.arange(n)) & (nn_sim >= settings.dup_threshold)
+    dup_idx = np.where(mutual)[0]
+    # Sort by neighbour similarity descending so the strongest duplicates lead.
+    dup_idx = dup_idx[np.argsort(-nn_sim[dup_idx])]
+    dup_idx = dup_idx[: max_dups]
+    duplicates = [
+        {
+            "imageId": ids[int(i)],
+            "similarity": round(float(nn_sim[i]), 4),
+        }
+        for i in dup_idx
+    ]
+
+    # --- Outliers: avg cosine distance to k nearest neighbours ---
+    k = min(settings.k_neighbors, n - 1)
+    # Exclude self by zeroing the diagonal influence: take top (k+1) sims per
+    # row then drop the largest (self == 1.0).
+    top_k_plus = np.partition(sim, n - (k + 1), axis=1)[:, n - (k + 1):]
+    top_k_plus_sorted = np.sort(top_k_plus, axis=1)[:, ::-1]
+    # Drop column 0 (self-similarity == 1.0), average the remaining k.
+    neighbor_sims = top_k_plus_sorted[:, 1: k + 1]
+    avg_distance = 1.0 - neighbor_sims.mean(axis=1)
+
+    cutoff = float(np.quantile(avg_distance, settings.outlier_percentile))
+    outlier_idx = np.where(avg_distance > cutoff)[0]
+    outlier_idx = outlier_idx[np.argsort(-avg_distance[outlier_idx])]
+    outlier_idx = outlier_idx[: max_out]
+    outliers = [
+        {
+            "imageId": ids[int(i)],
+            "score": round(float(avg_distance[i]), 4),
+        }
+        for i in outlier_idx
+    ]
+
+    return {"outliers": outliers, "duplicates": duplicates}
 
 
 def hash_file(path: Path) -> str:
@@ -1302,10 +1499,16 @@ def get_infinity_engine() -> tuple[Any, Any]:
     return engines[0]
 
 
-def _infinity_submit(loop: Any, coro: Any) -> Any:
-    """Thread-safe coroutine submission to a specific event loop."""
+def _infinity_submit(loop: Any, coro: Any, timeout: float = 600.0) -> Any:
+    """Thread-safe coroutine submission with a generous timeout.
+
+    If the engine's event loop exits or the GPU hangs, the future will never
+    resolve and the calling thread would block forever.  A timeout turns that
+    into a recoverable exception so the caller can fall back to the
+    sentence-transformers path.
+    """
     future = asyncio.run_coroutine_threadsafe(coro, loop)
-    return future.result()
+    return future.result(timeout=timeout)
 
 
 def encode_images_with_infinity(images: list[dict[str, Any]], engine_idx: int | None = None) -> list[list[float]]:

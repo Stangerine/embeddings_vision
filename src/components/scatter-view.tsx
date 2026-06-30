@@ -116,7 +116,7 @@ export function ScatterView() {
     ? new Set(cleaning.outliers.map((o) => o.imageId))
     : EMPTY_SET;
   const duplicateIdSet = cleaning
-    ? new Set(cleaning.duplicates.flatMap((d) => [d.imageIdA, d.imageIdB]))
+    ? new Set(cleaning.duplicates.map((d) => d.imageId))
     : EMPTY_SET;
 
   // Compute bounds
@@ -319,58 +319,26 @@ export function ScatterView() {
       ctx.setLineDash([]);
     }
 
-    // Cleaning overlay: duplicate capsule bonds first, then outlier rings on top
+    // Cleaning overlay: duplicate rings first, then outlier rings on top
     if (cleaning) {
       const screenById = new Map<string, { x: number; y: number }>();
       for (const p of points) screenById.set(p.image.id, { x: p.screenX, y: p.screenY });
 
-      // Duplicate pairs — capsule bond: wide translucent body + crisp core + endpoint rings
+      // Duplicate images — blue halo ring on each near-duplicate sample
       if (cleaning.duplicates.length > 0) {
-        const pairSegments = cleaning.duplicates
-          .map((pair) => {
-            const a = screenById.get(pair.imageIdA);
-            const b = screenById.get(pair.imageIdB);
-            if (!a || !b) return null;
-            return { a, b };
-          })
-          .filter((s): s is { a: { x: number; y: number }; b: { x: number; y: number } } => s !== null);
-
-        // Outer translucent body (gives the "capsule" feel)
-        ctx.strokeStyle = 'rgba(37, 99, 235, 0.18)';
-        ctx.lineWidth = 9;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        for (const { a, b } of pairSegments) {
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-        }
-        ctx.stroke();
-
-        // Crisp center line
-        ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        for (const { a, b } of pairSegments) {
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-        }
-        ctx.stroke();
-        ctx.lineCap = 'butt';
-
-        // Endpoint rings — visually binds each point to its pair
-        ctx.strokeStyle = 'rgba(37, 99, 235, 0.95)';
-        ctx.lineWidth = 1.5;
-        const drawnEndpoints = new Set<string>();
-        for (const pair of cleaning.duplicates) {
-          for (const id of [pair.imageIdA, pair.imageIdB]) {
-            if (drawnEndpoints.has(id)) continue;
-            drawnEndpoints.add(id);
-            const s = screenById.get(id);
-            if (!s) continue;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, 8, 0, Math.PI * 2);
-            ctx.stroke();
-          }
+        for (const dup of cleaning.duplicates) {
+          const s = screenById.get(dup.imageId);
+          if (!s) continue;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(37, 99, 235, 0.22)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(37, 99, 235, 0.9)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
       }
 
@@ -726,7 +694,7 @@ export function ScatterView() {
             <span className="text-[10px] text-[#64748B] uppercase tracking-wider mr-1">清洗</span>
             <button
               onClick={() => setShowCleaning((v) => !v)}
-              title="基于 2D embedding 检测离群点和近似重复样本"
+              title="基于高维 embedding 检测离群点和近似重复样本"
               className={cn(
                 'text-[11px] px-2 py-1 rounded transition-colors flex items-center gap-1',
                 showCleaning
@@ -747,9 +715,9 @@ export function ScatterView() {
                 </span>
                 <span
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#2563EB]/10 text-[#2563EB]"
-                  title="成对距离过近"
+                  title="互最近邻高相似度"
                 >
-                  重复对 {cleaning.duplicates.length}
+                  重复图片 {cleaning.duplicates.length}
                 </span>
               </div>
             )}
@@ -938,20 +906,18 @@ export function ScatterView() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px]">
-                  <span className="relative inline-flex h-3 w-5 items-center justify-center">
-                    <span className="absolute inline-flex h-[7px] w-5 rounded-full bg-[#2563EB]/20" />
-                    <span className="absolute inline-flex h-[1.5px] w-5 bg-[#2563EB]/85" />
-                    <span className="absolute left-0 inline-flex h-3 w-3 rounded-full border border-[#2563EB]" />
-                    <span className="absolute right-0 inline-flex h-3 w-3 rounded-full border border-[#2563EB]" />
+                  <span className="relative inline-flex h-3 w-3 items-center justify-center">
+                    <span className="absolute inline-flex h-3 w-3 rounded-full border-[3px] border-[#2563EB]/25" />
+                    <span className="absolute inline-flex h-3 w-3 rounded-full border border-[#2563EB]" />
                   </span>
-                  <span className="text-[#475569]">重复对</span>
+                  <span className="text-[#475569]">重复图片</span>
                   <span className="ml-auto font-mono text-[#64748B]">
                     {cleaning.duplicates.length}
                   </span>
                 </div>
               </div>
               <div className="mt-1.5 pt-1.5 border-t border-[#E2E8F0] text-[9px] text-[#64748B] leading-relaxed">
-                基于 2D embedding 启发式
+                基于高维 embedding 预计算
               </div>
             </div>
           )}

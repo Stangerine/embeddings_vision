@@ -32,7 +32,7 @@ class BgeSettings:
     enabled: bool = env_bool("BGE_VL_ENABLE", True)
     preload_on_startup: bool = env_bool("BGE_PRELOAD_ON_STARTUP", True)
     use_infinity: bool = env_bool("BGE_USE_INFINITY", True)
-    infinity_concurrency: int = int(os.environ.get("BGE_INFINITY_CONCURRENCY", "4"))
+    infinity_concurrency: int = int(os.environ.get("BGE_INFINITY_CONCURRENCY", "3"))
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,26 @@ class GptVisionSettings:
 
 
 @dataclass(frozen=True)
+class CleaningSettings:
+    """Thresholds for the precomputed dataset cleaning suggestions.
+
+    Duplicates use mutual nearest-neighbour images in high-dimensional cosine
+    space (not the collapsed 2D projection and not an exploding pair count).
+    Outliers use the average cosine distance to k nearest neighbours, flagging
+    the furthest ``outlier_percentile`` fraction.
+    """
+
+    dup_threshold: float = float(os.environ.get("CLEANING_DUP_THRESHOLD", "0.98"))
+    outlier_percentile: float = float(
+        os.environ.get("CLEANING_OUTLIER_PERCENTILE", "0.95")
+    )
+    k_neighbors: int = int(os.environ.get("CLEANING_K_NEIGHBORS", "6"))
+    # Max duplicate *images* / max outliers. 0 (default) = auto-scale from n.
+    max_pairs: int = int(os.environ.get("CLEANING_MAX_PAIRS", "0"))
+    max_outliers: int = int(os.environ.get("CLEANING_MAX_OUTLIERS", "0"))
+
+
+@dataclass(frozen=True)
 class SemanticRuntimeSettings:
     provider: str = os.environ.get("SEMANTIC_PROVIDER", "bge")
     config_path: Path = Path(os.environ.get("SEMANTIC_CONFIG_PATH", "backend/semantic_config.local.json"))
@@ -62,6 +82,7 @@ class SemanticRuntimeSettings:
 
 BGE_SETTINGS = BgeSettings()
 DATASET_SETTINGS = DatasetSettings()
+CLEANING_SETTINGS = CleaningSettings()
 SEMANTIC_RUNTIME_SETTINGS = SemanticRuntimeSettings()
 
 SEMANTIC_OPTIONS: dict[str, list[str]] = {

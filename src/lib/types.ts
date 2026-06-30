@@ -65,6 +65,23 @@ export interface DatasetInfo {
   };
 }
 
+export interface CleaningOutlier {
+  imageId: string;
+  /** Average cosine distance to k nearest neighbours in high-dim space. */
+  score: number;
+}
+
+export interface CleaningDuplicate {
+  imageId: string;
+  /** Cosine similarity to this image's mutual nearest neighbour. */
+  similarity: number;
+}
+
+export interface CleaningSuggestions {
+  outliers: CleaningOutlier[];
+  duplicates: CleaningDuplicate[];
+}
+
 export interface DatasetPayload {
   info: DatasetInfo;
   images: DatasetImage[];
@@ -88,6 +105,8 @@ export interface DatasetPayload {
       device: string;
     };
   };
+  /** Precomputed cleaning suggestions (null until embeddings are ready). */
+  cleaning?: CleaningSuggestions | null;
 }
 
 export interface DatasetUploadJob {
